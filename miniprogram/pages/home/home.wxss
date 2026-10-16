@@ -1,0 +1,2 @@
+.panel .section { margin-top: 0; }
+.row { margin-bottom: 16rpx; font-size: 29rpx; }

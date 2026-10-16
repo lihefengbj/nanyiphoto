@@ -1,0 +1,6 @@
+.overlay { position: fixed; inset: 0; z-index: 100; background: rgba(20,35,25,.45); display: flex; align-items: center; justify-content: center; }
+.dialog { width: 580rpx; padding: 38rpx; border-radius: 20rpx; background: #fff; }
+.heading { display: block; font-size: 34rpx; font-weight: 600; }
+.body { display: block; font-size: 27rpx; line-height: 1.8; margin: 24rpx 0; }
+.link { color: #244c3b; font-size: 26rpx; }
+button { font-size: 27rpx; margin-top: 22rpx; }

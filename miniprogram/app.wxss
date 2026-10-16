@@ -1,0 +1,15 @@
+page { background: #f6f5f0; color: #23352e; font-family: -apple-system, sans-serif; }
+.page { padding: 40rpx 36rpx 80rpx; }
+.eyebrow { color: #66776c; font-size: 22rpx; letter-spacing: 4rpx; }
+.title { display: block; font-size: 50rpx; font-weight: 600; margin: 18rpx 0 20rpx; }
+.subtitle { color: #66776c; font-size: 27rpx; line-height: 1.7; }
+.panel { background: #fff; border: 1rpx solid #e2e6df; border-radius: 18rpx; padding: 30rpx; margin-top: 30rpx; }
+.section { display: block; font-size: 32rpx; font-weight: 600; margin: 36rpx 0 20rpx; }
+.muted { color: #77867b; font-size: 24rpx; line-height: 1.7; }
+.warning { background: #f1eada; color: #746243; padding: 24rpx; border-radius: 12rpx; font-size: 25rpx; line-height: 1.7; }
+button { border-radius: 12rpx; font-size: 28rpx; line-height: 2.8; margin-top: 22rpx; }
+button::after { border: none; }
+.primary { background: #244c3b; color: #fff; }
+.secondary { background: #e8ede5; color: #244c3b; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 20rpx; }
+.error { color: #a04135; font-size: 25rpx; margin-top: 20rpx; line-height: 1.7; }

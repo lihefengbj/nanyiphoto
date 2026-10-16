@@ -1,0 +1,13 @@
+{
+  "name": "nanyiphoto",
+  "version": "0.1.0",
+  "private": true,
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "test": "node --test scripts/*.test.mjs",
+    "check": "node scripts/validate-specs.mjs && node scripts/check-miniprogram.mjs",
+    "specs:release": "node scripts/validate-specs.mjs --release",
+    "miniprogram:sync": "node scripts/sync-specs.mjs",
+    "smoke:api": "node scripts/smoke-api.mjs"
+  }
+}

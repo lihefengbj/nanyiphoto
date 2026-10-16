@@ -1,0 +1,17 @@
+<view class="page">
+  <text class="eyebrow">NANYI PHOTO / M0</text>
+  <text class="title">先把每个像素做对。</text>
+  <text class="subtitle">照片制作工具正在开发。模型与正式审核尚未接入，当前可验证设备上的精确导出。</text>
+  <view class="panel">
+    <text class="section">本地导出实验室</text>
+    <text class="muted">选择照片 → 裁剪缩放 → 验证像素与文件大小。无 AI、不上传、不保证 DPI。</text>
+    <button class="primary" bindtap="openLab">验证本机导出能力</button>
+  </view>
+  <text class="section">规格草稿</text>
+  <view class="warning">以下条目尚未完成用途核验，不可用于正式制作或报名提交。</view>
+  <view wx:for="{{specs}}" wx:key="id" class="panel" data-id="{{item.id}}" bindtap="openSpec">
+    <view class="row"><text>{{item.name}}</text><text class="muted">待核验 →</text></view>
+    <text class="muted">{{item.pixels.width}} × {{item.pixels.height}} px · {{item.scope.channel}}</text>
+  </view>
+  <privacy-consent id="privacy" />
+</view>

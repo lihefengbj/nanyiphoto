@@ -1,0 +1,14 @@
+{
+  "description": "南忆证件照 M0 / 本地导出 PoC",
+  "miniprogramRoot": "miniprogram/",
+  "projectname": "nanyiphoto",
+  "appid": "touristappid",
+  "compileType": "miniprogram",
+  "libVersion": "2.32.3",
+  "setting": {
+    "es6": true,
+    "minified": true,
+    "postcss": true,
+    "urlCheck": true
+  }
+}

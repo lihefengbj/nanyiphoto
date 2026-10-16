@@ -1,0 +1,18 @@
+{
+  "pages": [
+    "pages/home/home",
+    "pages/spec-detail/spec-detail",
+    "pages/lab/lab"
+  ],
+  "window": {
+    "navigationBarTitleText": "南忆证件照",
+    "navigationBarBackgroundColor": "#F6F5F0",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F6F5F0"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "usingComponents": {
+    "privacy-consent": "/components/privacy-consent/privacy-consent"
+  }
+}

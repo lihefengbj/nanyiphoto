@@ -1,0 +1,19 @@
+<view class="page">
+  <block wx:if="{{spec}}">
+    <text class="eyebrow">DRAFT / NOT FOR SUBMISSION</text>
+    <text class="title">{{spec.name}}</text>
+    <view class="warning">{{spec.notes}}</view>
+    <view class="panel">
+      <view class="line">目标像素 <text>{{spec.pixels.width}} × {{spec.pixels.height}}</text></view>
+      <view wx:if="{{spec.print}}" class="line">打印尺寸 <text>{{spec.print.widthMM}} × {{spec.print.heightMM}} mm</text></view>
+      <view class="line">文件格式 <text>{{spec.file.format}}</text></view>
+      <view class="line">适用渠道 <text>{{spec.scope.channel}}</text></view>
+      <view class="line">编辑允许性 <text>待核验</text></view>
+      <text class="muted">来源：{{spec.source.title}}</text>
+    </view>
+    <button disabled>用途与规则核验后开放</button>
+  </block>
+  <text wx:else>未找到规格，请返回首页。</text>
+  <button class="secondary" bindtap="back">返回</button>
+  <privacy-consent id="privacy" />
+</view>

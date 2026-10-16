@@ -1,0 +1,4 @@
+.title { font-size: 40rpx; }
+.line { display: flex; justify-content: space-between; gap: 24rpx; font-size: 27rpx; padding: 18rpx 0; border-bottom: 1rpx solid #eef0e9; }
+.line text { max-width: 65%; text-align: right; }
+.panel .muted { display: block; margin-top: 24rpx; }

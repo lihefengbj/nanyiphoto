@@ -1,0 +1,32 @@
+# Python 3.12.12 / local development + tests; verified 2026-10-16.
+# Exact versions; editable project install is a separate step.
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+click==8.5.0
+colorama==0.4.6
+fastapi==0.143.2
+greenlet==3.5.6
+h11==0.16.0
+httpcore2==2.13.1
+httpx2==2.13.1
+idna==3.20
+iniconfig==2.3.1
+opentelemetry-api==1.45.1
+packaging==26.3
+pillow==12.3.0
+pip==26.2.1
+pluggy==1.7.0
+pydantic==2.14.1
+pydantic-core==2.50.1
+pygments==2.21.0
+pytest==9.1.1
+python-dotenv==1.2.4
+ruff==0.17.1
+setuptools==80.9.0
+sqlalchemy==2.0.54
+starlette==1.8.0
+truststore==0.10.5
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+uvicorn==0.54.0

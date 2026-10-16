@@ -1,0 +1,9 @@
+<view wx:if="{{visible}}" class="overlay">
+  <view class="dialog">
+    <text class="heading">照片使用说明</text>
+    <text class="body">当前为本地导出验证，照片只在设备上裁剪，不上传云端、不用于训练。保存相册需另行授权。</text>
+    <text class="link" bindtap="openAgreement">查看小程序隐私保护指引</text>
+    <button id="privacy-agree" open-type="agreePrivacyAuthorization" bindagreeprivacyauthorization="agree">同意并继续</button>
+    <button bindtap="disagree">暂不使用</button>
+  </view>
+</view>
