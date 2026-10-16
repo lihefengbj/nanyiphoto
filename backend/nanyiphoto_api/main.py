@@ -4,13 +4,17 @@ import hmac
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, Request
+from fastapi import Depends, Header, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
 from .config import Settings
 from .db import uploads
+from .diagnostics import error_code
+from .middleware import DiagnosticFastAPI
 from .service import TaskService
 from .storage import DomainError
 
@@ -30,22 +34,35 @@ def create_app(settings: Settings | None = None, *, service: TaskService | None 
     async def lifespan(_app):
         async def maintain():
             while True:
-                await run_in_threadpool(task_service.cleanup)
-                # No model/provider is installed in the default app.
-                if task_service.ready:
-                    await run_in_threadpool(task_service.process_next)
+                try:
+                    await run_in_threadpool(task_service.cleanup)
+                    # No model/provider is installed in the default app.
+                    if task_service.ready:
+                        await run_in_threadpool(task_service.process_next)
+                except Exception as error:
+                    task_service.diagnostics.emit(
+                        "maintenance.failed", "ERROR", error=error, errorCode="MAINTENANCE_FAILED"
+                    )
                 await asyncio.sleep(1)
 
         maintenance = asyncio.create_task(maintain())
+        task_service.diagnostics.emit(
+            "service.started", environment=settings.environment, ready=task_service.ready
+        )
         try:
             yield
         finally:
-            maintenance.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await maintenance
-            task_service.engine.dispose()
+            try:
+                maintenance.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await maintenance
+                task_service.engine.dispose()
+            finally:
+                task_service.diagnostics.emit("service.stopped")
+                task_service.diagnostics.close()
 
-    app = FastAPI(
+    app = DiagnosticFastAPI(
+        diagnostics=task_service.diagnostics,
         title="Nanyi Photo — Local Contract API",
         version="0.1.0",
         lifespan=lifespan,
@@ -55,16 +72,19 @@ def create_app(settings: Settings | None = None, *, service: TaskService | None 
     app.state.service = task_service
 
     @app.exception_handler(DomainError)
-    async def domain_error(_request, error):
+    async def domain_error(request, error):
+        request.scope["diagnostic_error_code"] = error_code(error)
         headers = {"Retry-After": "3"} if error.status == 429 else {}
         return JSONResponse({"error": {"code": error.code}}, status_code=error.status, headers=headers)
 
-    @app.middleware("http")
-    async def private_response(request, call_next):
-        response = await call_next(request)
-        response.headers["Cache-Control"] = "no-store"
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        return response
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request, error):
+        request.scope["diagnostic_error_code"] = "VALIDATION_FAILED"
+        return await request_validation_exception_handler(request, error)
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(_request, _error):
+        return JSONResponse({"error": {"code": "INTERNAL_ERROR"}}, status_code=500)
 
     def get_owner(authorization: Annotated[str | None, Header()] = None):
         if not authorization or not authorization.startswith("Bearer ") or len(authorization) > 4096:

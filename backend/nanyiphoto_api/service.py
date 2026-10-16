@@ -11,6 +11,7 @@ from sqlalchemy import and_, func, insert, select, update
 from .catalog import Catalog
 from .config import Settings
 from .db import create_database, events, tasks, uploads
+from .diagnostics import EventLogger, error_code
 from .providers import MattingProvider, MattingResult
 from .storage import DomainError, LocalObjectStore, normalize_image
 
@@ -23,6 +24,7 @@ class TaskService:
         provider: MattingProvider | None = None,
         moderation_available: bool = False,
         clock: Callable[[], float] = time.time,
+        diagnostics: EventLogger | None = None,
     ):
         self.settings = settings
         self.engine = create_database(settings.database_url)
@@ -32,6 +34,7 @@ class TaskService:
         self.moderation_available = moderation_available
         self.clock = clock
         self.catalog.read(self.now())  # Bad configuration fails closed at startup.
+        self.diagnostics = diagnostics or EventLogger(settings)
 
     def now(self):
         return int(self.clock())
@@ -52,11 +55,13 @@ class TaskService:
         return dict(row)
 
     def _expire(self, conn):
-        conn.execute(
+        result = conn.execute(
             update(tasks)
             .where(tasks.c.state.in_(["pending", "ready"]), tasks.c.expires_at <= self.now())
             .values(state="expired", cleanup_pending=True, lease=None)
         )
+        if result.rowcount:
+            self.diagnostics.emit("task.transition", state="expired", count=result.rowcount)
 
     def create_upload(self, owner):
         upload_id = uuid.uuid4().hex
@@ -85,6 +90,7 @@ class TaskService:
                     deleted=False,
                 )
             )
+        self.diagnostics.emit("upload.registered", upload_id=upload_id)
         return {
             "uploadId": upload_id,
             "expiresAt": expires,
@@ -97,6 +103,7 @@ class TaskService:
         }
 
     def upload_image(self, upload_id, owner, data):
+        started = time.perf_counter()
         with self.engine.begin() as conn:
             upload = self._owned(conn, uploads, upload_id, owner)
             if upload["expires_at"] <= self.now():
@@ -125,8 +132,24 @@ class TaskService:
                         height=height,
                     )
                 )
+            self.diagnostics.emit(
+                "upload.completed",
+                upload_id=upload_id,
+                width=width,
+                height=height,
+                bytes=len(normalized),
+                durationMs=(time.perf_counter() - started) * 1000,
+            )
             return {"uploadId": upload_id, "width": width, "height": height, "sha256": digest}
-        except Exception:
+        except Exception as error:
+            self.diagnostics.emit(
+                "upload.failed",
+                "ERROR",
+                upload_id=upload_id,
+                error=error,
+                errorCode=error_code(error),
+                durationMs=(time.perf_counter() - started) * 1000,
+            )
             # Leave deletion observable/retryable if the filesystem itself fails.
             with self.engine.begin() as conn:
                 conn.execute(update(uploads).where(uploads.c.id == upload_id).values(status="failed"))
@@ -155,6 +178,9 @@ class TaskService:
             if existing:
                 if existing["request_hash"] != request_hash:
                     raise DomainError("IDEMPOTENCY_CONFLICT", 409)
+                self.diagnostics.emit(
+                    "task.reused", task_id=existing["id"], upload_id=upload_id, state=existing["state"]
+                )
                 return {"taskId": existing["id"], "state": existing["state"]}
             upload = self._owned(conn, uploads, upload_id, owner)
             if upload["expires_at"] <= self.now():
@@ -197,7 +223,8 @@ class TaskService:
                 )
             )
             conn.execute(update(uploads).where(uploads.c.id == upload_id).values(status="consumed"))
-            return {"taskId": task_id, "state": "pending"}
+        self.diagnostics.emit("task.created", task_id=task_id, upload_id=upload_id, state="pending")
+        return {"taskId": task_id, "state": "pending"}
 
     def _refresh(self, conn, task):
         if task["state"] != "pending":
@@ -219,6 +246,7 @@ class TaskService:
         if values:
             conn.execute(update(tasks).where(tasks.c.id == task["id"]).values(**values))
             task.update(values)
+            self.diagnostics.emit("task.transition", task_id=task["id"], state=task["state"])
 
     def get_task(self, task_id, owner):
         with self.engine.begin() as conn:
@@ -240,6 +268,13 @@ class TaskService:
                     )
                 )
                 task.update(state="failed", error_code="SPEC_UNAVAILABLE")
+                self.diagnostics.emit(
+                    "task.transition",
+                    "WARNING",
+                    task_id=task_id,
+                    state="failed",
+                    errorCode="SPEC_UNAVAILABLE",
+                )
             response = {
                 "taskId": task_id,
                 "state": task["state"],
@@ -283,6 +318,7 @@ class TaskService:
                         lease=None,
                     )
                 )
+        self.diagnostics.emit("task.cancelled", task_id=task_id, state="cancelled")
         self.cleanup()
         return {"taskId": task_id, "state": "cancelled"}
 
@@ -296,10 +332,18 @@ class TaskService:
             if row is None:
                 raise DomainError("UNKNOWN_MODERATION_TRACE", 404)
             task = dict(row)
+            self.diagnostics.emit("moderation.received", task_id=task["id"], decision=decision)
             duplicate = conn.execute(select(events).where(events.c.id == event_id)).mappings().first()
             if duplicate:
                 if duplicate["task_id"] != task["id"] or duplicate["decision"] != decision:
+                    self.diagnostics.emit(
+                        "moderation.conflict",
+                        "WARNING",
+                        task_id=task["id"],
+                        errorCode="MODERATION_EVENT_CONFLICT",
+                    )
                     raise DomainError("MODERATION_EVENT_CONFLICT", 409)
+                self.diagnostics.emit("moderation.duplicate", task_id=task["id"], decision=decision)
                 return
             conn.execute(insert(events).values(id=event_id, task_id=task["id"], decision=decision))
             if task["state"] != "pending":
@@ -314,6 +358,16 @@ class TaskService:
                             cleanup_pending=True,
                         )
                     )
+                    self.diagnostics.emit(
+                        "moderation.conflict",
+                        "WARNING",
+                        task_id=task["id"],
+                        errorCode="MODERATION_DECISION_CONFLICT",
+                    )
+                else:
+                    self.diagnostics.emit(
+                        "moderation.ignored", task_id=task["id"], state=task["state"], decision=decision
+                    )
                 return
             if task["moderation_status"] != "pending":
                 if task["moderation_status"] != decision:
@@ -327,6 +381,14 @@ class TaskService:
                             cleanup_pending=True,
                         )
                     )
+                    self.diagnostics.emit(
+                        "moderation.conflict",
+                        "WARNING",
+                        task_id=task["id"],
+                        errorCode="MODERATION_DECISION_CONFLICT",
+                    )
+                else:
+                    self.diagnostics.emit("moderation.ignored", task_id=task["id"], decision=decision)
                 return
             conn.execute(update(tasks).where(tasks.c.id == task["id"]).values(moderation_status=decision))
             task["moderation_status"] = decision
@@ -354,7 +416,7 @@ class TaskService:
             return False
         with self.engine.begin() as conn:
             self._expire(conn)
-            conn.execute(
+            recovered = conn.execute(
                 update(tasks)
                 .where(
                     tasks.c.state == "pending",
@@ -364,7 +426,7 @@ class TaskService:
                 )
                 .values(processing_status="queued", lease=None)
             )
-            conn.execute(
+            exhausted = conn.execute(
                 update(tasks)
                 .where(
                     tasks.c.state == "pending",
@@ -380,6 +442,15 @@ class TaskService:
                     lease=None,
                 )
             )
+            if recovered.rowcount:
+                self.diagnostics.emit("worker.recovered", "WARNING", count=recovered.rowcount)
+            if exhausted.rowcount:
+                self.diagnostics.emit(
+                    "worker.exhausted",
+                    "ERROR",
+                    count=exhausted.rowcount,
+                    errorCode="WORKER_LEASE_EXHAUSTED",
+                )
             row = (
                 conn.execute(
                     select(tasks)
@@ -410,6 +481,8 @@ class TaskService:
                     attempts=task["attempts"] + 1,
                 )
             )
+        started = time.perf_counter()
+        self.diagnostics.emit("inference.started", task_id=task["id"], attempt=task["attempts"] + 1)
         try:
             data = self.store.read(upload["object_key"])
             if hashlib.sha256(data).hexdigest() != task["input_sha256"]:
@@ -420,6 +493,12 @@ class TaskService:
                 self._expire(conn)
                 current = dict(conn.execute(select(tasks).where(tasks.c.id == task["id"])).mappings().one())
                 if current["state"] != "pending" or current["lease"] != lease:
+                    self.diagnostics.emit(
+                        "inference.discarded",
+                        task_id=task["id"],
+                        state=current["state"],
+                        durationMs=(time.perf_counter() - started) * 1000,
+                    )
                     return True
                 refs = {}
                 for name, content in (("foreground", result.foreground), ("alpha", result.alpha)):
@@ -441,7 +520,21 @@ class TaskService:
                     processing_status="succeeded", asset_refs=refs, model_version=result.model_version
                 )
                 self._refresh(conn, current)
+            self.diagnostics.emit(
+                "inference.completed",
+                task_id=task["id"],
+                state=current["state"],
+                durationMs=(time.perf_counter() - started) * 1000,
+            )
         except Exception as error:
+            self.diagnostics.emit(
+                "inference.failed",
+                "ERROR",
+                task_id=task["id"],
+                error=error,
+                errorCode=error_code(error, "MODEL_FAILED"),
+                durationMs=(time.perf_counter() - started) * 1000,
+            )
             with self.engine.begin() as conn:
                 row = conn.execute(select(tasks).where(tasks.c.id == task["id"])).mappings().one()
                 if row["state"] == "pending" and row["lease"] == lease:
@@ -473,6 +566,7 @@ class TaskService:
             return self.store.read(task["asset_refs"][name])
 
     def cleanup(self):
+        observations = []
         with self.engine.begin() as conn:
             self._expire(conn)
             # BEGIN IMMEDIATE serializes this local sweep; production needs shared leases.
@@ -502,12 +596,36 @@ class TaskService:
                         )
                     )
                     conn.execute(update(uploads).where(uploads.c.id == upload["id"]).values(deleted=True))
-                except OSError:
+                    observations.append(
+                        (
+                            "cleanup.completed",
+                            "INFO",
+                            {
+                                "task_id": task["id"],
+                                "upload_id": upload["id"],
+                                "state": task["state"],
+                                "count": len(keys),
+                            },
+                        )
+                    )
+                except OSError as error:
                     conn.execute(
                         update(tasks)
                         .where(tasks.c.id == task["id"])
                         .values(
                             cleanup_attempts=task["cleanup_attempts"] + 1,
+                        )
+                    )
+                    observations.append(
+                        (
+                            "cleanup.failed",
+                            "ERROR",
+                            {
+                                "task_id": task["id"],
+                                "error": error,
+                                "errorCode": "CLEANUP_FAILED",
+                                "attempt": task["cleanup_attempts"] + 1,
+                            },
                         )
                     )
             abandoned = (
@@ -525,5 +643,21 @@ class TaskService:
                 try:
                     self.store.delete(upload["object_key"])
                     conn.execute(update(uploads).where(uploads.c.id == upload["id"]).values(deleted=True))
-                except OSError:
-                    pass  # Kept undeleted for the next sweep; never claimed as deleted.
+                    observations.append(
+                        (
+                            "cleanup.completed",
+                            "INFO",
+                            {"upload_id": upload["id"], "count": 1},
+                        )
+                    )
+                except OSError as error:
+                    # Kept undeleted for the next sweep; never claimed as deleted.
+                    observations.append(
+                        (
+                            "cleanup.failed",
+                            "ERROR",
+                            {"upload_id": upload["id"], "error": error, "errorCode": "CLEANUP_FAILED"},
+                        )
+                    )
+        for event, level, fields in observations:
+            self.diagnostics.emit(event, level, **fields)

@@ -21,7 +21,8 @@ await new Promise((resolvePort, reject) => {
 const port = socket.address().port;
 await new Promise((close) => socket.close(close));
 const child = spawn(python, [
-  "-m", "uvicorn", "nanyiphoto_api.main:app", "--host", "127.0.0.1", "--port", String(port), "--log-level", "error"
+  "-m", "uvicorn", "nanyiphoto_api.main:app", "--host", "127.0.0.1", "--port", String(port),
+  "--log-level", "error", "--no-access-log"
 ], {
   cwd: root, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
   env: {
@@ -29,7 +30,8 @@ const child = spawn(python, [
     NP_DATABASE_URL: "sqlite:///" + database.replaceAll("\\", "/"),
     NP_STORAGE_ROOT: objects, NP_CATALOG_PATH: resolve(root, "config/specs.example.json"),
     NP_MAX_UPLOAD_BYTES: "4194304", NP_MAX_IMAGE_PIXELS: "4194304", NP_QUEUE_CAPACITY: "8",
-    NP_TASK_TTL_SECONDS: "600", NP_UPLOAD_TTL_SECONDS: "300", NP_RESULT_TTL_SECONDS: "600"
+    NP_TASK_TTL_SECONDS: "600", NP_UPLOAD_TTL_SECONDS: "300", NP_RESULT_TTL_SECONDS: "600",
+    NP_LOG_LEVEL: "INFO", NP_LOG_CONSOLE: "true", NP_LOG_FILE: ""
   }
 });
 let logs = "";
@@ -59,10 +61,20 @@ try {
   for (const [path, options, expected] of scenarios) {
     const response = await fetch(base + path, { ...options, signal: AbortSignal.timeout(2000) });
     if (response.status !== expected) throw new Error(`${path}: expected ${expected}, got ${response.status}`);
+    const requestId = response.headers.get("x-request-id");
+    if (!/^[a-f0-9]{32}$/.test(requestId || "")) throw new Error(`${path}: missing safe request ID`);
     if (path === "/api/specs" && expected === 200 && (await response.json()).specs.length !== 0) {
       throw new Error("Draft specifications were incorrectly exposed as available.");
     }
   }
+  await new Promise((delay) => setTimeout(delay, 100));
+  if (logs.includes(token) || logs.includes("smoke-user")) {
+    throw new Error("Sensitive development identity leaked into service logs.");
+  }
+  if (!logs.split("\n").some((line) => {
+    try { const record = JSON.parse(line); return record.event === "http.request" && record.requestId; }
+    catch { return false; }
+  })) throw new Error("Structured request diagnostics were not captured.");
 } finally {
   if (child.exitCode === null && child.signalCode === null) {
     // Windows virtualenv launchers may have an interpreter child. Kill only
@@ -91,4 +103,4 @@ try {
   }
   if (existsSync(objects)) rmdirSync(objects);
 }
-console.log("Live API smoke passed: startup, unready gate, authentication, private drafts and closed callback; process cleaned up.");
+console.log("Live API smoke passed: authentication, gates, request IDs and safe structured diagnostics; process cleaned up.");

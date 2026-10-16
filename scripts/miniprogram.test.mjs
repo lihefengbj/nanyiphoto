@@ -62,7 +62,10 @@ test("API error does not become success and has no automatic paid retries", asyn
 });
 test("privacy component resolves rejection on detach", () => {
   let definition;
-  const context = createContext({ Component(value) { definition = value; } });
+  const context = createContext({
+    require: () => require("../miniprogram/utils/logger.js"),
+    Component(value) { definition = value; }
+  });
   new Script(readFileSync(new URL("../miniprogram/components/privacy-consent/privacy-consent.js", import.meta.url), "utf8")).runInContext(context);
   let decision;
   const component = { setData() {} };

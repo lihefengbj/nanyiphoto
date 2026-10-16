@@ -74,6 +74,7 @@ def settings(tmp_path):
         storage_root=tmp_path / "objects",
         catalog_path=path,
         development_tokens={ALICE: "alice", BOB: "bob"},
+        log_console=False,
     )
 
 
@@ -87,6 +88,7 @@ def service(settings, clock, model):
     instance = TaskService(settings, provider=model, moderation_available=True, clock=clock)
     yield instance
     instance.engine.dispose()
+    instance.diagnostics.close()
 
 
 @pytest.fixture

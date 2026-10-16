@@ -1,14 +1,37 @@
 {
-  "description": "南忆证件照 M0 / 本地导出 PoC",
+  "description": "南一证件照 M0 / 本地导出 PoC",
   "miniprogramRoot": "miniprogram/",
   "projectname": "nanyiphoto",
-  "appid": "touristappid",
+  "appid": "wx0a555c0aab9137e7",
   "compileType": "miniprogram",
   "libVersion": "2.32.3",
   "setting": {
     "es6": true,
     "minified": true,
     "postcss": true,
-    "urlCheck": true
-  }
+    "urlCheck": true,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "enhance": false,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "editorSetting": {}
 }

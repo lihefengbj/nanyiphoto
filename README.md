@@ -1,4 +1,4 @@
-# 南忆证件照
+# 南一证件照
 
 原生微信小程序 + FastAPI 单服务。当前交付是 M0 工程与本地契约实现，不是可上线的证件照服务。
 
@@ -7,6 +7,7 @@
 - 小程序：首页、禁用规格详情、本地裁剪 / 精确像素导出验证页、隐私授权组件。
 - 本地 API：私有上传、防覆盖与归属校验、版本化规格 / ETag、幂等任务、有限队列、审核 / 推理双状态、受鉴权素材访问、取消 / 过期清理。
 - 模型接口与 worker 步骤：测试注入合成数据验证状态，不在应用内安装假抠图或自动审核。
+- 后端结构化日志 / 请求标识、小程序有界调试日志；不记录照片与访问凭证。
 - Node / Python 单元测试、静态检查与 CI 配置。
 
 模型权重、真实 `mediaCheckAsync`、COS / 云数据库和真机导出仍待 PoC；生产配置被代码禁止。详细边界见 [开发与验证记录](docs/07-开发与验证记录.md)。
@@ -40,7 +41,7 @@ uv --cache-dir .wheelhouse/uv-cache pip install --python .venv/Scripts/python.ex
 复制 `.env.example`为被 Git 忽略的 `.env`，设置一个随机的 `NP_DEV_TOKEN`。这只是本地开发身份，不是微信登录、API Key 或真实用户标识，不要使用账号密码。开发环境仅监听回环地址：
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn nanyiphoto_api.main:app --env-file .env --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe -m uvicorn nanyiphoto_api.main:app --env-file .env --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
 - `/health/live`：进程运行时返回 200。
@@ -48,6 +49,30 @@ uv --cache-dir .wheelhouse/uv-cache pip install --python .venv/Scripts/python.ex
 - `/api/specs`：携带本地 Bearer 令牌；当前草稿目录返回空可用列表。
 - `/api/callbacks/moderation`：返回 503，不能用任意 JSON 请求批准照片。
 - `.data/`包含本地任务数据库与临时对象，不入 Git。不要将开发服务直接暴露到公网。
+
+### 测试日志
+
+后端默认输出 JSON 行到控制台和 `.data/logs/api.jsonl`，单文件 1 MiB、保留 3 个备份。
+每次请求的 `X-Request-ID` 与日志 `requestId` 对应；后台任务用脱敏 `taskRef` / `uploadRef` 关联。
+使用 `--no-access-log` 关闭 Uvicorn 原生访问日志，避免其额外输出原始 URL / 查询参数。
+
+```powershell
+Get-Content .data/logs/api.jsonl -Tail 50
+```
+
+小程序日志默认关闭。测试时将 `miniprogram/config.js` 中 `diagnostics.enabled` 改为 `true` 并重新编译，
+或在开发者工具控制台临时开启：
+
+```javascript
+getApp().diagnostics.configure({ enabled: true, level: "INFO", maxEntries: 100 })
+getApp().diagnostics.snapshot()
+getApp().diagnostics.clear()
+getApp().diagnostics.configure({ enabled: false })
+```
+
+小程序日志只进入调试控制台和有界内存，不自动上传或持久化。网络异常提供安全的
+`requestId` / `statusCode` 方便关联；未知服务端错误文本归一为 `API_FAILED`。
+测试结束关闭调试日志。配置、脱敏边界与排查示例见 [日志与问题定位](docs/08-日志与问题定位.md)。
 
 ### 打开小程序
 

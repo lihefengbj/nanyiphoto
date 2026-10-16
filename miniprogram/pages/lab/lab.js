@@ -1,4 +1,5 @@
 const { cropTransform, exportOptions, verifyExport } = require("../../utils/geometry");
+const { logger, platformCode } = require("../../utils/logger");
 const presets = [
   { name: "295 × 413 像素测试", width: 295, height: 413 },
   { name: "600 × 600 方形测试", width: 600, height: 600 },
@@ -17,6 +18,7 @@ Page({
     this.createSelectorQuery().select("#photo").fields({ node: true, size: true }).exec((result) => {
       if (!this.alive) return;
       if (!result[0] || !result[0].node) {
+        logger.emit("lab.canvas_unavailable", "WARNING", { errorCode: "CANVAS_UNAVAILABLE" });
         this.setData({ error: "设备不支持当前 Canvas 接口，请升级微信后再测试。" });
         return;
       }
@@ -28,16 +30,19 @@ Page({
   async choosePhoto() {
     if (this.data.busy || !this.canvas) return;
     this.setData({ busy: true, error: "", evidence: null });
+    let stage = "privacy";
     try {
       if (typeof wx.requirePrivacyAuthorize !== "function") throw new Error("PRIVACY_API_UNAVAILABLE");
       await call(wx.requirePrivacyAuthorize, {});
       if (!this.alive) return;
+      stage = "select";
       const result = await call(wx.chooseMedia, {
         count: 1, mediaType: ["image"], sourceType: ["album", "camera"], sizeType: ["original"]
       });
       if (!this.alive) return;
       const photo = result.tempFiles[0];
       if (photo.size > 10 * 1024 * 1024) throw new Error("PHOTO_TOO_LARGE");
+      stage = "decode";
       const info = await call(wx.getImageInfo, { src: photo.tempFilePath });
       if (!["jpeg", "png"].includes(info.type)) throw new Error("FORMAT_UNSUPPORTED");
       if (info.width * info.height > 12 * 1024 * 1024) throw new Error("PHOTO_TOO_LARGE");
@@ -53,8 +58,12 @@ Page({
       this.image = image;
       this.source = { width: info.width, height: info.height };
       this.setData({ hasPhoto: true, zoom: 100, panX: 50, panY: 50 });
+      logger.emit("lab.photo_selected", "INFO", {
+        width: info.width, height: info.height, bytes: photo.size, format: info.type
+      });
       this.draw();
     } catch (error) {
+      logger.emit("lab.photo_failed", "WARNING", { stage, errorCode: platformCode(error, "PHOTO_FAILED") });
       const messages = {
         PHOTO_TOO_LARGE: "图片过大，请选择 10MB、约 1200 万像素以内的照片。",
         FORMAT_UNSUPPORTED: "本阶段只验证 JPEG / PNG，请先转换格式。",
@@ -98,6 +107,7 @@ Page({
   async exportPhoto() {
     if (!this.image || this.data.busy) return;
     this.setData({ busy: true, error: "", evidence: null });
+    const started = Date.now();
     try {
       const target = presets[this.data.presetIndex];
       const output = await call(wx.canvasToTempFilePath, exportOptions(this.canvas, target));
@@ -117,7 +127,15 @@ Page({
         evidence: { width: info.width, height: info.height, format: info.type, bytes: stat.stats.size },
         permissionDenied: false
       });
-    } catch {
+      logger.emit("lab.export_completed", "INFO", {
+        width: info.width, height: info.height, format: info.type, bytes: stat.stats.size,
+        durationMs: Math.max(0, Date.now() - started)
+      });
+    } catch (error) {
+      logger.emit("lab.export_failed", "WARNING", {
+        stage: "export", errorCode: platformCode(error, "EXPORT_FAILED"),
+        durationMs: Math.max(0, Date.now() - started)
+      });
       if (this.alive) this.setData({ error: "导出或读回校验失败，未开放保存，请重试。" });
     } finally {
       if (this.alive) this.setData({ busy: false });
@@ -128,8 +146,10 @@ Page({
     this.setData({ busy: true, error: "" });
     try {
       await call(wx.saveImageToPhotosAlbum, { filePath: this.outputPath });
+      logger.emit("lab.save_completed");
       if (this.alive) wx.showToast({ title: "已保存测试图片", icon: "success" });
-    } catch {
+    } catch (error) {
+      logger.emit("lab.save_failed", "WARNING", { stage: "save", errorCode: platformCode(error, "SAVE_FAILED") });
       if (this.alive) this.setData({
         permissionDenied: true,
         error: "保存未完成。若相册授权被拒绝，可主动打开设置后再试；相册中的文件仍需人工检查。"
@@ -142,7 +162,9 @@ Page({
   removeExport(path) {
     if (!this.ownedExports.has(path)) return;
     this.ownedExports.delete(path);
-    wx.getFileSystemManager().unlink({ filePath: path, fail() {} });
+    wx.getFileSystemManager().unlink({ filePath: path, fail() {
+      logger.emit("lab.cleanup_failed", "WARNING", { stage: "cleanup", errorCode: "TEMP_CLEANUP_FAILED" });
+    } });
   },
   onUnload() {
     this.alive = false;
