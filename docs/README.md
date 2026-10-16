@@ -1,6 +1,6 @@
 # 证件照生成器小程序 — 项目文档
 
-修订日期：2026-10-16。当前处于 M0 准备：只有方案、结构化草稿规格和校验工具，尚无小程序 / 后端应用、模型 PoC 或云端验收。
+修订日期：2026-10-16。当前已建立 M0 原生小程序 / FastAPI 本地工程，100 项本地单测通过；模型、正式审核、云端与真机验收尚未完成。启动方式见[仓库 README](../README.md)。
 
 对标产品：微信小程序「证件照」（#小程序://证件照/K2m1Yd2lHMrdZ6t）
 
@@ -14,6 +14,7 @@
 | [04-当前进度.md](./04-当前进度.md) | 进度看板与变更记录 |
 | [05-技术评审.md](./05-技术评审.md) | 初审 / 复审、逐项修订与实现 / 验证边界 |
 | [06-接口与验收规范.md](./06-接口与验收规范.md) | 规格发布门禁、任务接口 / 状态、素材、清理及验收矩阵 |
+| [07-开发与验证记录.md](./07-开发与验证记录.md) | 首批本地实现、100 项单测 / 冒烟证据、生产差异与下一阶段 |
 | [规格示例](../config/specs.example.json) | 3 条禁用草稿，仅测试结构与规则，不可直接上线 |
 | [校验工具](../scripts/validate-specs.mjs) | 无第三方依赖的结构 / 发布校验 |
 | [校验测试](../scripts/validate-specs.test.mjs) | 正常、异常、发布门禁与 CLI 自动化用例 |
@@ -39,8 +40,9 @@
 需要 Node.js 24 LTS，在仓库根目录执行：
 
 ```powershell
-node scripts/validate-specs.mjs
-node --test scripts/validate-specs.test.mjs
+npm run miniprogram:sync
+npm run check
+npm test
 ```
 
 发布真实配置前执行 `node scripts/validate-specs.mjs --release path/to/specs.json`。当前示例目录全部禁用，此模式应失败；通过工具检查也不代替来源 / 用途的人工核验。
