@@ -372,6 +372,56 @@ test("page processes bounded photo, changes background locally, exports result n
   assert.equal(requests.filter((request) => request.method === "DELETE").length, 1);
 });
 
+test("private comparison page shows model and local color-key results for the same selected photo", async () => {
+  const { page, requests } = pageFixture();
+  await page.connect();
+  page.data.consent = true;
+  await page.choosePhoto();
+  assert.equal(page.data.hasResult, true, page.data.error);
+
+  const target = { width: 295, height: 413 };
+  const source = new Uint8ClampedArray(target.width * target.height * 4);
+  for (let y = 0; y < target.height; y++) {
+    for (let x = 0; x < target.width; x++) {
+      const offset = (y * target.width + x) * 4;
+      const person = x > 70 && x < 225 && y > 60 && y < 350;
+      source.set(person ? [180, 100, 80, 255] : [0, 255, 0, 255], offset);
+    }
+  }
+  let localPreview;
+  page.context = {
+    fillRect() {},
+    drawImage() {},
+    getImageData() { return { data: source }; },
+    createImageData(width, height) {
+      return { data: new Uint8ClampedArray(width * height * 4) };
+    },
+    putImageData(imageData) { localPreview = imageData.data; }
+  };
+  page.canvasRect = { left: 0, top: 0, width: 270, height: 378 };
+  page.canvasDocumentLeft = 0;
+  page.canvasDocumentTop = 0;
+  page.data.localPixelAccessReady = true;
+  page.sampleLocalBackground({ detail: { x: 0, y: 0 } });
+  assert.equal(page.data.localKeyColor, "#00FF00");
+  assert.equal(page.data.localKeySampled, true);
+
+  const remotePosts = requests.filter((request) => request.method === "POST").length;
+  page.runLocalComparison();
+  assert.equal(page.data.localResultReady, true, page.data.error);
+  assert.equal(page.data.showMode, "local");
+  assert.ok(localPreview, JSON.stringify({
+    hasCanvas: !!page.canvas, hasMask: !!page.localAlphaMask, mode: page.data.showMode, error: page.data.error
+  }));
+  assert.deepEqual(Array.from(localPreview.slice(0, 4)), [255, 255, 255, 255]);
+  assert.equal(requests.filter((request) => request.method === "POST").length, remotePosts);
+  page.setPreviewMode({ currentTarget: { dataset: { mode: "model" } } });
+  assert.equal(page.data.showMode, "model");
+  page.setPreviewMode({ currentTarget: { dataset: { mode: "local" } } });
+  assert.equal(page.data.showMode, "local");
+  page.onUnload();
+});
+
 test("backend model failure clears processing label, blocks export and permits retry", async () => {
   const f = pageFixture();
   await f.page.connect();

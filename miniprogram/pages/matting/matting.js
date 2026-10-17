@@ -2,13 +2,12 @@ const { cropTransform } = require("../../utils/geometry");
 const { exportWithConstraints, parseByteRange } = require("../../utils/exporter");
 const { ManagedFiles, call } = require("../../utils/managed-files");
 const { createMattingLabClient, waitForMatting } = require("../../services/matting-lab");
-const presets = [
-  { name: "295 × 413 像素测试", width: 295, height: 413 },
-  { name: "600 × 600 方形测试", width: 600, height: 600 },
-  { name: "600 × 800 比例测试", width: 600, height: 800 }
-];
+const presets = require("../../data/photo-presets");
+const { parseHexColor, toHexColor, createAlphaMask, compositeImageData } = require("../../utils/chroma-key");
 const backgrounds = [
-  { name: "白色", color: "#FFFFFF" }, { name: "蓝色", color: "#438EDB" }, { name: "红色", color: "#D93434" }
+  { name: "白色", color: "#FFFFFF", rgb: [255, 255, 255] },
+  { name: "蓝色", color: "#438EDB", rgb: [67, 142, 219] },
+  { name: "红色", color: "#D93434", rgb: [217, 52, 52] }
 ];
 const messages = {
   INVALID_LAB_CONFIG: "请输入本机或同一 Wi-Fi 的私有地址，例如 http://192.168.1.20:8000。",
@@ -46,7 +45,10 @@ Page({
   data: {
     presets, backgrounds, formats: ["JPEG", "PNG"], presetIndex: 0, backgroundIndex: 0, formatIndex: 0,
     baseUrlText: "", tokenText: "", connected: false, consent: false, busy: false, processing: false, stateText: "",
-    hasPhoto: false, hasResult: false, showOriginal: false, previewHeight: 378, zoom: 100, panX: 50, panY: 50,
+    hasPhoto: false, hasResult: false, showOriginal: false, showMode: "model", previewHeight: 378,
+    zoom: 100, panX: 50, panY: 50,
+    localKeyColor: "", localKeySampled: false, localResultReady: false, localTolerance: 60,
+    localPixelAccessReady: false,
     minBytesText: "", maxBytesText: "", evidence: null, error: "", cleanupPending: false, modelId: "",
     canvasReady: false, canvasLoading: false, canvasError: "",
     progressVisible: false, progressStep: 0, progressTitle: "", progressHint: "",
@@ -82,8 +84,16 @@ Page({
         this.canvas = photo;
         this.uploadCanvas = upload;
         this.context = context;
+        this.canvasRect = {
+          left: nodes[0].left || 0, top: nodes[0].top || 0,
+          width: nodes[0].width || 270, height: nodes[0].height || 378
+        };
+        this.canvasDocumentLeft = this.canvasRect.left + (this.pageScrollLeft || 0);
+        this.canvasDocumentTop = this.canvasRect.top + (this.pageScrollTop || 0);
+        const localPixelAccessReady = ["getImageData", "createImageData", "putImageData"]
+          .every((method) => typeof context[method] === "function");
         this.draw();
-        this.setData({ canvasReady: true, canvasLoading: false, canvasError: "" });
+        this.setData({ canvasReady: true, canvasLoading: false, canvasError: "", localPixelAccessReady });
       } catch {
         this.canvas = null;
         this.uploadCanvas = null;
@@ -96,7 +106,7 @@ Page({
       // exec returns one result per query; a selectAll result would be a nested array.
       // Query the named canvases independently so their roles cannot be swapped.
       const query = this.createSelectorQuery();
-      query.select("#photo").fields({ node: true, size: true });
+      query.select("#photo").fields({ node: true, size: true, rect: true });
       query.select("#upload").fields({ node: true, size: true });
       query.exec(finish);
     } catch { finish(null); }
@@ -209,7 +219,12 @@ Page({
       this.cutoutImage = null;
       this.originalImage = null;
       this.cutoutPath = null;
-      this.setData({ hasResult: false, hasPhoto: false, showOriginal: false });
+      this.localSourceImageData = null;
+      this.localAlphaMask = null;
+      this.setData({
+        hasResult: false, hasPhoto: false, showOriginal: false, showMode: "model",
+        localKeyColor: "", localKeySampled: false, localResultReady: false
+      });
       await call(wx.requirePrivacyAuthorize, {});
       if (!active()) return;
       const selected = await call(wx.chooseMedia, {
@@ -229,7 +244,10 @@ Page({
       this.originalImage = original;
       this.originalSize = { width: info.width, height: info.height };
       this.sourceSize = this.originalSize;
-      this.setData({ hasPhoto: true, zoom: 100, panX: 50, panY: 50, stateText: "生成有限尺寸的推理副本" });
+      this.setData({
+        hasPhoto: true, zoom: 100, panX: 50, panY: 50, showMode: "model",
+        stateText: "生成有限尺寸的推理副本"
+      });
       this.updateProcessingStage("prepare", generation);
       this.draw();
       const scale = Math.min(1, 1280 / Math.max(info.width, info.height),
@@ -287,7 +305,7 @@ Page({
       if (!active()) { this.cutoutImage = null; await this.files.remove(cutoutPath); return; }
       this.cutoutPath = cutoutPath;
       this.sourceSize = { width: result.width, height: result.height };
-      this.setData({ hasResult: true, stateText: "可换白／蓝／红底 · 开发测试结果未接正式审核" });
+      this.setData({ hasResult: true, showMode: "model", stateText: "私有模型处理完成" });
       this.draw();
     } catch (error) {
       this.stopProcessingProgress();
@@ -333,11 +351,22 @@ Page({
     if (this.data.busy) return;
     const key = event.currentTarget.dataset.key;
     const value = Number(event.detail.value);
-    const valid = { presetIndex: [0, 2], backgroundIndex: [0, 2], formatIndex: [0, 1],
+    const valid = { presetIndex: [0, presets.length - 1], backgroundIndex: [0, 2], formatIndex: [0, 1],
       zoom: [100, 300], panX: [0, 100], panY: [0, 100] };
     if (!valid[key] || !Number.isInteger(value) || value < valid[key][0] || value > valid[key][1]) return;
     this.invalidateExport().catch(() => this.setData({ cleanupPending: true }));
-    this.setData({ [key]: value, showOriginal: false, error: "" });
+    const localInvalidated = ["presetIndex", "zoom", "panX", "panY"].includes(key);
+    if (localInvalidated) {
+      this.localSourceImageData = null;
+      this.localAlphaMask = null;
+    }
+    this.setData({
+      [key]: value,
+      showOriginal: false,
+      showMode: this.data.hasResult ? "model" : "original",
+      ...(localInvalidated ? { localKeyColor: "", localKeySampled: false, localResultReady: false } : {}),
+      error: ""
+    });
     this.draw();
   },
   changeBytes(event) {
@@ -349,24 +378,168 @@ Page({
   },
   toggleOriginal() {
     if (this.data.busy || !this.data.hasResult) return;
-    this.setData({ showOriginal: !this.data.showOriginal });
+    const showOriginal = !this.data.showOriginal;
+    this.setData({ showOriginal, showMode: showOriginal ? "original" : "model" });
+    this.draw();
+  },
+  onPageScroll(event) {
+    if (event && Number.isFinite(event.scrollTop)) this.pageScrollTop = event.scrollTop;
+    if (event && Number.isFinite(event.scrollLeft)) this.pageScrollLeft = event.scrollLeft;
+  },
+  canvasPoint(event) {
+    const touch = event && (
+      event.changedTouches && event.changedTouches[0]
+      || event.touches && event.touches[0]
+      || event.detail
+    );
+    if (!touch || !this.canvas) return null;
+    let x;
+    let y;
+    if (Number.isFinite(touch.pageX) && Number.isFinite(touch.pageY)) {
+      x = touch.pageX - (this.canvasDocumentLeft || 0);
+      y = touch.pageY - (this.canvasDocumentTop || 0);
+    } else if (Number.isFinite(touch.clientX) && Number.isFinite(touch.clientY)) {
+      x = touch.clientX + (this.pageScrollLeft || 0) - (this.canvasDocumentLeft || 0);
+      y = touch.clientY + (this.pageScrollTop || 0) - (this.canvasDocumentTop || 0);
+    } else if (Number.isFinite(touch.x) && Number.isFinite(touch.y)) {
+      x = touch.x;
+      y = touch.y;
+    } else return null;
+    const rect = this.canvasRect || { width: this.canvas.width, height: this.canvas.height };
+    const displayWidth = rect.width > 0 ? rect.width : this.canvas.width;
+    const displayHeight = rect.height > 0 ? rect.height : this.canvas.height;
+    if (x < 0 || y < 0 || x >= displayWidth || y >= displayHeight) return null;
+    return {
+      x: Math.min(this.canvas.width - 1, Math.floor(x * this.canvas.width / displayWidth)),
+      y: Math.min(this.canvas.height - 1, Math.floor(y * this.canvas.height / displayHeight))
+    };
+  },
+  sampleLocalBackground(event) {
+    if (!this.data.hasPhoto || this.data.busy) return;
+    if (!this.data.localPixelAccessReady) {
+      this.setData({ error: "此设备暂不支持本地像素处理，无法进行结果对比。" });
+      return;
+    }
+    const point = this.canvasPoint(event);
+    if (!point) {
+      this.setData({ error: "请在预览中的照片背景处点按取样。" });
+      return;
+    }
+    try {
+      const target = presets[this.data.presetIndex];
+      this.draw("original");
+      const pixels = this.context.getImageData(0, 0, target.width, target.height);
+      const source = { width: target.width, height: target.height, data: new Uint8ClampedArray(pixels.data) };
+      const sum = [0, 0, 0];
+      let count = 0;
+      for (let y = Math.max(0, point.y - 2); y <= Math.min(target.height - 1, point.y + 2); y++) {
+        for (let x = Math.max(0, point.x - 2); x <= Math.min(target.width - 1, point.x + 2); x++) {
+          const offset = (y * target.width + x) * 4;
+          for (let channel = 0; channel < 3; channel++) sum[channel] += source.data[offset + channel];
+          count++;
+        }
+      }
+      const color = sum.map((value) => Math.round(value / count));
+      this.localSourceImageData = source;
+      this.localAlphaMask = null;
+      const showMode = this.data.showMode;
+      this.setData({
+        localKeyColor: toHexColor(color), localKeySampled: true, localResultReady: false,
+        showMode, error: ""
+      });
+      this.draw();
+    } catch {
+      this.setData({ error: "此设备暂不支持读取本地像素，无法生成本地对比结果。" });
+    }
+  },
+  runLocalComparison() {
+    if (this.data.busy || !this.data.hasPhoto) return;
+    if (!this.data.localKeySampled || !this.localSourceImageData) {
+      this.setData({ error: "先在预览中点按照片原背景取样，再生成本地结果。" });
+      return;
+    }
+    try {
+      const source = this.localSourceImageData;
+      const result = createAlphaMask(source, source.width, source.height, {
+        keyColor: parseHexColor(this.data.localKeyColor),
+        tolerance: this.data.localTolerance,
+        feather: 48
+      });
+      const pixelCount = source.width * source.height;
+      if (result.removedPixels === 0) throw new Error("BACKGROUND_NOT_FOUND");
+      if (result.removedPixels > pixelCount * 0.92) throw new Error("BACKGROUND_REMOVED_TOO_MUCH");
+      this.localAlphaMask = result.alpha;
+      this.setData({ localResultReady: true, showMode: "local", showOriginal: false, error: "" });
+      this.draw();
+    } catch (error) {
+      const message = error && error.message === "BACKGROUND_NOT_FOUND"
+        ? "没有找到连到画面边缘的相近背景，请重新取样或提高容差。"
+        : error && error.message === "BACKGROUND_REMOVED_TOO_MUCH"
+          ? "识别为背景的区域过大，请降低容差或重新取样。"
+          : "本地处理未完成，请重新取样后再试。";
+      this.setData({ localResultReady: false, error: message });
+    }
+  },
+  changeLocalTolerance(event) {
+    if (this.data.busy) return;
+    const localTolerance = Number(event.detail.value);
+    if (!Number.isInteger(localTolerance) || localTolerance < 0 || localTolerance > 180) return;
+    this.localAlphaMask = null;
+    this.setData({
+      localTolerance, localResultReady: false, showMode: "original",
+      showOriginal: true, error: ""
+    });
+    this.draw();
+  },
+  setPreviewMode(event) {
+    if (this.data.busy) return;
+    const mode = event.currentTarget.dataset.mode;
+    if (!["original", "local", "model"].includes(mode)) return;
+    if (mode === "local" && !this.data.localResultReady) return;
+    if (mode === "model" && !this.data.hasResult) return;
+    if (mode === "original" && !this.data.hasPhoto) return;
+    this.setData({ showMode: mode, showOriginal: mode === "original" });
     this.draw();
   },
   reset() {
     if (this.data.busy) return;
     this.invalidateExport().catch(() => this.setData({ cleanupPending: true }));
-    this.setData({ zoom: 100, panX: 50, panY: 50, showOriginal: false });
+    this.localSourceImageData = null;
+    this.localAlphaMask = null;
+    this.setData({
+      zoom: 100, panX: 50, panY: 50, showOriginal: false,
+      showMode: this.data.hasResult ? "model" : "original",
+      localKeyColor: "", localKeySampled: false, localResultReady: false
+    });
     this.draw();
   },
-  draw() {
+  draw(mode = this.data.showMode) {
     if (!this.canvas) return;
     const target = presets[this.data.presetIndex];
     this.canvas.width = target.width;
     this.canvas.height = target.height;
     this.setData({ previewHeight: 270 * target.height / target.width });
+    if (this.canvasRect && this.canvasRect.width > 0) {
+      this.canvasRect.height = this.canvasRect.width * target.height / target.width;
+    }
     this.context.fillStyle = backgrounds[this.data.backgroundIndex].color;
     this.context.fillRect(0, 0, target.width, target.height);
-    const original = this.data.showOriginal || !this.cutoutImage;
+    if (mode === "local" && this.localSourceImageData && this.localAlphaMask) {
+      try {
+        const data = compositeImageData(
+          this.localSourceImageData,
+          this.localAlphaMask,
+          backgrounds[this.data.backgroundIndex].rgb
+        );
+        const imageData = this.context.createImageData(target.width, target.height);
+        imageData.data.set(data);
+        this.context.putImageData(imageData, 0, 0);
+      } catch {
+        this.setData({ error: "本地结果预览失败，请重新生成。" });
+      }
+      return;
+    }
+    const original = mode === "original" || !this.cutoutImage;
     const image = original ? this.originalImage : this.cutoutImage;
     if (!image) return;
     const size = original ? this.originalSize : this.sourceSize;
@@ -376,13 +549,13 @@ Page({
   },
   async exportPhoto() {
     if (!this.data.hasResult || !this.cutoutImage || this.data.busy) return;
-    this.setData({ busy: true, error: "", showOriginal: false });
+    this.setData({ busy: true, error: "", showOriginal: false, showMode: "model" });
     try {
       await this.invalidateExport();
       await this.files.sweep();
       await this.files.cleanup([this.cutoutPath]);
       if (!this.alive) return;
-      this.draw(); // Never export the original-comparison view.
+      this.draw("model"); // Never export a comparison view.
       const format = this.data.formatIndex === 1 ? "png" : "jpeg";
       const output = await exportWithConstraints({
         canvas: this.canvas, pixels: presets[this.data.presetIndex],
@@ -440,6 +613,8 @@ Page({
     if (this.files) this.files.close().catch(() => {});
     this.cutoutImage = null;
     this.originalImage = null;
+    this.localSourceImageData = null;
+    this.localAlphaMask = null;
     this.canvas = null;
     this.uploadCanvas = null;
   }

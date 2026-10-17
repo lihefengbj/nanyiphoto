@@ -4,7 +4,8 @@ import { createRequire } from "node:module";
 import { loadLab } from "./helpers/load-lab.mjs";
 
 const require = createRequire(import.meta.url);
-const { MAX_LAB_BYTES, parseByteRange, exportWithConstraints } = require("../miniprogram/utils/exporter.js");
+const { MAX_LAB_BYTES, parseByteRange, parseKilobyteRange, exportWithConstraints } =
+  require("../miniprogram/utils/exporter.js");
 const { createLogger } = require("../miniprogram/utils/logger.js");
 const { reserveExportPath, releaseExportPath, isMissingFile, findAbandonedExports } =
   require("../miniprogram/utils/export-files.js");
@@ -46,6 +47,24 @@ test("byte input rejects decimals, scientific notation, negatives, inverted and 
     assert.throws(() => parseByteRange("", invalid), /INVALID_EXPORT/);
   }
   assert.throws(() => parseByteRange("200", "100"), /INVALID_EXPORT/);
+});
+
+test("kilobyte input converts inclusive KB bounds to exact bytes without changing byte-level exports", () => {
+  assert.deepEqual(parseKilobyteRange("", " "), { minBytes: null, maxBytes: null });
+  assert.deepEqual(parseKilobyteRange("1", "1"), { minBytes: 1024, maxBytes: 1024 });
+  assert.deepEqual(parseKilobyteRange(" 2 ", "10240"), {
+    minBytes: 2048,
+    maxBytes: MAX_LAB_BYTES
+  });
+  assert.deepEqual(parseByteRange("1024", "2048"), { minBytes: 1024, maxBytes: 2048 });
+});
+
+test("kilobyte input rejects zero, fractions, inverted and above-10-MiB ranges", () => {
+  for (const invalid of ["0", "-1", "1.5", "1e2", "10241", null, 1]) {
+    assert.throws(() => parseKilobyteRange(invalid, ""), /INVALID_EXPORT/);
+    assert.throws(() => parseKilobyteRange("", invalid), /INVALID_EXPORT/);
+  }
+  assert.throws(() => parseKilobyteRange("2", "1"), /INVALID_EXPORT/);
 });
 
 test("unconstrained JPEG keeps original quality and exports exactly once", async () => {
@@ -281,28 +300,175 @@ function readyPage(p) {
   return page;
 }
 
-test("lab integrates exact byte constraints and publishes evidence only after a verified fit", async () => {
-  const p = platform({ sizes: [250, 150] });
+function readyPixelPage(p = platform()) {
+  const page = loadLab(p.wx);
+  page.canvas = { ...pixels };
+  page.image = {};
+  page.source = { width: 400, height: 600 };
+  const rgba = new Uint8ClampedArray(pixels.width * pixels.height * 4);
+  for (let y = 0; y < pixels.height; y++) {
+    for (let x = 0; x < pixels.width; x++) {
+      const offset = (y * pixels.width + x) * 4;
+      const isBackground = x < 42 || x >= pixels.width - 42 || y < 42 || y >= pixels.height - 42;
+      rgba.set(isBackground ? [0, 255, 0, 255] : [180, 115, 95, 255], offset);
+    }
+  }
+  page.context = {
+    fillRect() {},
+    drawImage() {},
+    getImageData(_x, _y, width, height) {
+      assert.equal(width, pixels.width);
+      assert.equal(height, pixels.height);
+      return { width, height, data: rgba };
+    },
+    createImageData(width, height) {
+      return { width, height, data: new Uint8ClampedArray(width * height * 4) };
+    },
+    putImageData(value) { this.lastImageData = value; }
+  };
+  page.canvasRect = { left: 10, top: 20, width: 270, height: 378 };
+  page.canvasDocumentLeft = 10;
+  page.canvasDocumentTop = 20;
+  page.data.pixelAccessReady = true;
+  page.data.keySampled = true;
+  page.data.keyColorHex = "#00FF00";
+  return { page, pixels: rgba, platform: p };
+}
+
+test("local background keying samples the photo, removes edge-connected color and composes locally", async () => {
+  const p = platform();
+  const { page } = readyPixelPage(p);
+  let transportCalls = 0;
+  p.wx.request = () => { transportCalls++; throw new Error("local keying must not use the network"); };
+  await page.processBackground();
+  assert.equal(page.data.backgroundRemoved, true, page.data.error);
+  assert.equal(page.data.error, "");
+  assert.ok(page.alphaMask[0] === 0);
+  const personPixel = (206 * pixels.width + 147) * 4;
+  assert.equal(page.alphaMask[personPixel / 4], 255);
+  assert.equal(page.context.lastImageData.data[0], 255);
+  assert.equal(page.context.lastImageData.data[3], 255);
+  assert.equal(transportCalls, 0);
+  page.changeBackground({ detail: { value: "1" } });
+  assert.equal(page.context.lastImageData.data[0], 67);
+  assert.equal(page.context.lastImageData.data[1], 142);
+  assert.equal(page.context.lastImageData.data[2], 219);
+});
+
+test("local keying requires a sampled color and pixel-capable Canvas", async () => {
+  const { page } = readyPixelPage();
+  page.data.keySampled = false;
+  await page.processBackground();
+  assert.match(page.data.error, /取样/);
+  assert.equal(page.data.backgroundRemoved, false);
+  page.data.keySampled = true;
+  page.data.pixelAccessReady = false;
+  await page.processBackground();
+  assert.match(page.data.error, /本地抠图/);
+  assert.equal(page.data.busy, false);
+});
+
+test("background sampling maps the tapped point through the displayed crop canvas", () => {
+  const { page, pixels: rgba } = readyPixelPage();
+  const x = 24;
+  const y = 32;
+  for (let row = y - 2; row <= y + 2; row++) {
+    for (let column = x - 2; column <= x + 2; column++) {
+      const offset = (row * pixels.width + column) * 4;
+      rgba.set([30, 220, 45, 255], offset);
+    }
+  }
+  page.sampleBackground({
+    changedTouches: [{ clientX: 10 + (x + 0.25) * 270 / pixels.width,
+      clientY: 20 + (y + 0.25) * 378 / pixels.height }]
+  });
+  assert.equal(page.data.keyColorHex, "#1EDC2D");
+  assert.equal(page.data.keySampled, true);
+  assert.equal(page.alphaMask, null);
+});
+
+test("canvas sampling and repair coordinates stay aligned after scrolling", () => {
+  const { page } = readyPixelPage();
+  page.pageScrollTop = 140;
+  const point = page.canvasPoint({
+    touches: [{ clientX: 10 + 135, clientY: 20 + 189 - 140 }]
+  });
+  assert.equal(point.x, 147);
+  assert.equal(point.y, 206);
+});
+
+test("manual erase and restore brush edits the mask and redraws the chosen background", () => {
+  const { page } = readyPixelPage();
+  page.sourceImageData = {
+    width: pixels.width, height: pixels.height,
+    data: new Uint8ClampedArray(pixels.width * pixels.height * 4).fill(180)
+  };
+  page.alphaMask = new Uint8Array(pixels.width * pixels.height).fill(255);
+  page.data.backgroundRemoved = true;
+  page.data.brushMode = "erase";
+  page.startBrush({ touches: [{ clientX: 10 + 135, clientY: 20 + 189 }] });
+  const center = (Math.floor(pixels.height / 2) * pixels.width) + Math.floor(pixels.width / 2);
+  assert.equal(page.alphaMask[center], 0);
+  page.endBrush();
+  page.data.brushMode = "restore";
+  page.startBrush({ touches: [{ clientX: 10 + 135, clientY: 20 + 189 }] });
+  assert.equal(page.alphaMask[center], 255);
+  page.endBrush();
+  assert.ok(page.context.lastImageData);
+});
+
+test("changing crop invalidates the old mask and sampled color", () => {
+  const { page } = readyPixelPage();
+  page.sourceImageData = { width: pixels.width, height: pixels.height, data: new Uint8ClampedArray(pixels.width * pixels.height * 4) };
+  page.alphaMask = new Uint8Array(pixels.width * pixels.height).fill(255);
+  page.data.backgroundRemoved = true;
+  page.data.keySampled = true;
+  page.data.keyColorHex = "#00FF00";
+  page.changeTransform({ currentTarget: { dataset: { key: "zoom" } }, detail: { value: 120 } });
+  assert.equal(page.alphaMask, null);
+  assert.equal(page.sourceImageData, null);
+  assert.equal(page.data.backgroundRemoved, false);
+  assert.equal(page.data.keySampled, false);
+});
+
+test("changing aspect ratio refreshes the touch-to-pixel mapping height", () => {
+  const { page } = readyPixelPage();
+  page.changePreset({ detail: { value: "3" } });
+  assert.equal(page.canvasRect.width, 270);
+  assert.equal(page.canvasRect.height, 270 * 531 / 413);
+  assert.equal(page.canvas.width, 413);
+  assert.equal(page.canvas.height, 531);
+});
+
+test("lab converts KB limits to exact bytes and publishes evidence only after a verified fit", async () => {
+  const p = platform({ sizes: [2500, 1500] });
   const page = readyPage(p);
-  page.data.minBytesText = "100";
-  page.data.maxBytesText = "200";
+  page.data.minKilobytesText = "1";
+  page.data.maxKilobytesText = "2";
   await page.exportPhoto();
   assert.equal(page.data.error, "");
   assert.equal(page.data.busy, false);
-  assert.equal(page.data.evidence.bytes, 150);
+  assert.equal(page.data.evidence.bytes, 1500);
+  assert.equal(page.data.evidence.kilobytes, "1.5");
   assert.equal(page.data.evidence.attempts, 2);
-  assert.equal(page.data.evidence.minBytes, 100);
-  assert.equal(page.data.evidence.maxBytes, 200);
+  assert.equal(page.data.evidence.minBytes, 1024);
+  assert.equal(page.data.evidence.maxBytes, 2048);
   assert.equal(page.ownedExports.size, 1);
   assert.ok(page.ownedExports.has(page.outputPath));
   assert.equal(p.files.size, 1);
 });
 
+test("export without a selected photo shows a clear next step", async () => {
+  const page = loadLab({});
+  await page.exportPhoto();
+  assert.match(page.data.error, /先拍摄或选择/);
+});
+
 test("lab PNG option is an actual PNG export with a one-attempt failure message when oversized", async () => {
-  const p = platform({ sizes: [300] });
+  const p = platform({ sizes: [2048] });
   const page = readyPage(p);
   page.data.formatIndex = 1;
-  page.data.maxBytesText = "200";
+  page.data.maxKilobytesText = "1";
   await page.exportPhoto();
   assert.equal(p.created[0].fileType, "png");
   assert.equal(p.created.length, 1);
@@ -313,12 +479,12 @@ test("lab PNG option is an actual PNG export with a one-attempt failure message 
 });
 
 test("lab shows bounded JPEG failure and does not expose saving when no candidate fits", async () => {
-  const p = platform({ sizes: [300] });
+  const p = platform({ sizes: [2048] });
   const page = readyPage(p);
-  page.data.maxBytesText = "200";
+  page.data.maxKilobytesText = "1";
   await page.exportPhoto();
   assert.equal(p.created.length, 8);
-  assert.match(page.data.error, /8 次/);
+  assert.match(page.data.error, /放宽限制/);
   assert.equal(page.data.evidence, null);
   assert.equal(page.outputPath, null);
   assert.equal(page.ownedExports.size, 0);
@@ -328,8 +494,8 @@ test("lab shows bounded JPEG failure and does not expose saving when no candidat
 test("lab validates inverted byte range before invoking the encoder", async () => {
   const p = platform();
   const page = readyPage(p);
-  page.data.minBytesText = "200";
-  page.data.maxBytesText = "100";
+  page.data.minKilobytesText = "2";
+  page.data.maxKilobytesText = "1";
   await page.exportPhoto();
   assert.equal(p.created.length, 0);
   assert.equal(page.data.evidence, null);
@@ -346,9 +512,9 @@ test("lab read-back failure cleans output and keeps save unavailable", async () 
 });
 
 test("lab cleanup failure remains tracked, pauses encoding and can be retried successfully", async () => {
-  const p = platform({ sizes: [300], failCleanup: true });
+  const p = platform({ sizes: [2048], failCleanup: true });
   const page = readyPage(p);
-  page.data.maxBytesText = "200";
+  page.data.maxKilobytesText = "1";
   await page.exportPhoto();
   assert.equal(p.created.length, 1);
   assert.equal(page.data.cleanupPending, 1);
@@ -390,7 +556,7 @@ test("cleanup never unlinks unowned photos", async () => {
 test("changing format, constraints, crop or preset invalidates and releases the old export", async () => {
   for (const [method, event] of [
     ["changeFormat", { detail: { value: "1" } }],
-    ["changeByteRange", { currentTarget: { dataset: { key: "maxBytesText" } }, detail: { value: "200" } }],
+    ["changeByteRange", { currentTarget: { dataset: { key: "maxKilobytesText" } }, detail: { value: "1" } }],
     ["changeTransform", { currentTarget: { dataset: { key: "zoom" } }, detail: { value: 120 } }],
     ["changePreset", { detail: { value: "1" } }],
     ["reset", undefined]
@@ -413,12 +579,12 @@ test("busy and malformed controls cannot change a running export configuration",
   page.changeFormat({ detail: { value: "1" } });
   page.changePreset({ detail: { value: "1" } });
   page.changeTransform({ currentTarget: { dataset: { key: "zoom" } }, detail: { value: 200 } });
-  page.changeByteRange({ currentTarget: { dataset: { key: "maxBytesText" } }, detail: { value: "100" } });
+  page.changeByteRange({ currentTarget: { dataset: { key: "maxKilobytesText" } }, detail: { value: "1" } });
   page.reset();
   assert.equal(page.data.formatIndex, 0);
   assert.equal(page.data.presetIndex, 0);
   assert.equal(page.data.zoom, 100);
-  assert.equal(page.data.maxBytesText, "");
+  assert.equal(page.data.maxKilobytesText, "");
   page.data.busy = false;
   page.changeFormat({ detail: { value: "9" } });
   page.changePreset({ detail: { value: "-1" } });

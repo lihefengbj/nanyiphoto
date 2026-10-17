@@ -5,6 +5,12 @@
 .consent { display: block; padding: 24rpx 0; font-size: 25rpx; line-height: 1.7; }
 .byte-range { display: flex; gap: 16rpx; margin-top: 20rpx; }
 .byte-input { width: 50%; font-size: 25rpx; padding: 16rpx 0; border-bottom: 1rpx solid #dce2d7; }
+.compare-modes { display: flex; gap: 10rpx; }
+.compare-modes button { flex: 1; padding: 0 8rpx; font-size: 23rpx; }
+.compare-modes .selected { background: #244c3b; color: #fff; }
+.local-compare { margin-top: 26rpx; padding: 22rpx; border-radius: 14rpx; background: #f3f5f0; }
+.local-compare .section { margin-top: 0; }
+.local-compare .muted { display: block; margin-top: 12rpx; }
 .processing-progress { margin: 24rpx 0; padding: 24rpx; border-radius: 18rpx; background: #edf2ea; }
 .progress-heading { font-size: 26rpx; color: #244c3b; }
 .progress-time { font-size: 22rpx; color: #667263; white-space: nowrap; margin-left: 12rpx; }

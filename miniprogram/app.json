@@ -1,8 +1,8 @@
 {
   "pages": [
     "pages/home/home",
-    "pages/spec-detail/spec-detail",
     "pages/lab/lab",
+    "pages/other/other",
     "pages/matting/matting"
   ],
   "window": {
@@ -13,6 +13,22 @@
   },
   "style": "v2",
   "sitemapLocation": "sitemap.json",
+  "tabBar": {
+    "color": "#77867B",
+    "selectedColor": "#244C3B",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/home/home",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/other/other",
+        "text": "其他"
+      }
+    ]
+  },
   "usingComponents": {
     "privacy-consent": "/components/privacy-consent/privacy-consent"
   }

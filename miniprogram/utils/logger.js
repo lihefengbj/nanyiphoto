@@ -3,7 +3,8 @@ const events = new Set([
   "diagnostic.invalid", "app.started", "network.completed", "network.failed", "network.rejected",
   "privacy.agreed", "privacy.declined", "privacy.unavailable", "privacy.contract_failed",
   "lab.canvas_unavailable", "lab.photo_selected", "lab.photo_failed",
-  "lab.export_completed", "lab.export_failed", "lab.save_completed", "lab.save_failed", "lab.cleanup_failed"
+  "lab.export_completed", "lab.export_failed", "lab.local_key_completed", "lab.local_key_failed",
+  "lab.save_completed", "lab.save_failed", "lab.cleanup_failed"
 ]);
 const codes = new Set([
   "INVALID_LAB_CONFIG", "INVALID_LAB_RESULT", "MATTING_LAB_DISABLED", "LOCAL_MODEL_NOT_CONFIGURED",
@@ -20,6 +21,8 @@ const codes = new Set([
   "PRIVACY_API_UNAVAILABLE", "PRIVACY_UNAVAILABLE", "PERMISSION_DENIED", "USER_CANCELLED",
   "PHOTO_TOO_LARGE", "FORMAT_UNSUPPORTED", "ORIENTATION_UNVERIFIED", "PHOTO_FAILED",
   "CANVAS_UNAVAILABLE", "EXPORT_FAILED", "SAVE_FAILED", "TEMP_CLEANUP_FAILED",
+  "BACKGROUND_NOT_FOUND", "BACKGROUND_REMOVED_TOO_MUCH", "LOCAL_KEY_FAILED",
+  "INVALID_CHROMA_INPUT", "INVALID_CHROMA_COLOR",
   "INVALID_TRANSFORM", "INVALID_EXPORT", "EXPORT_DIMENSION_MISMATCH",
   "EXPORT_FORMAT_MISMATCH", "EXPORT_SIZE_INVALID", "EXPORT_SIZE_OUT_OF_BOUNDS"
 ]);
@@ -77,7 +80,7 @@ function createLogger(options = {}) {
           event: events.has(event) ? event : "diagnostic.invalid"
         };
         // No object traversal, free-form messages, URLs, request data or identity fields.
-        for (const key of ["status", "durationMs", "width", "height", "bytes", "attempts"]) {
+        for (const key of ["status", "durationMs", "width", "height", "bytes", "attempts", "tolerance"]) {
           const value = fields[key];
           if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1e12) {
             record[key] = Math.round(value * 1000) / 1000;

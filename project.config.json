@@ -1,7 +1,7 @@
 {
-  "description": "南一证件照 M0 / 本地导出 PoC",
+  "description": "南一证件照本地编辑工具",
   "miniprogramRoot": "miniprogram/",
-  "projectname": "nanyiphoto",
+  "projectname": "南一证件照",
   "appid": "wx0a555c0aab9137e7",
   "compileType": "miniprogram",
   "libVersion": "2.32.3",

@@ -1,22 +1,32 @@
-<view class="page">
-  <text class="eyebrow">NANYI PHOTO / P0</text>
-  <text class="title">先把每个像素做对。</text>
-  <text class="subtitle">先验证换背景与精确导出。正式审核和报名规格仍待核验，当前为私有开发测试。</text>
-  <view class="panel">
-    <text class="section">真实抠图与换背景</text>
-    <text class="muted">连接你配置了真实权重的本机后端 → 选授权照片 → 白／蓝／红换底 → 裁剪与保存。默认后端不启用，非上线服务。</text>
-    <button class="primary" bindtap="openMatting">打开换背景实验室</button>
+<view class="page home">
+  <view class="brand">
+    <view class="brand-mark"><text>南一</text></view>
+    <view class="brand-copy">
+      <text class="brand-company">南一科技</text>
+      <text class="brand-name">南一证件照</text>
+    </view>
   </view>
-  <view class="panel">
-    <text class="section">本地导出实验室</text>
-    <text class="muted">选择照片 → 裁剪缩放 → 验证 JPEG / PNG、像素与字节范围。无 AI、不上传、不保证 DPI。</text>
-    <button class="primary" bindtap="openLab">验证本机导出能力</button>
+  <text class="eyebrow">简单 · 本地 · 自然</text>
+  <text class="title">轻松制作日常证件照</text>
+  <text class="subtitle">裁剪照片、调整背景和导出尺寸，在本机完成编辑。</text>
+
+  <view class="hero-card">
+    <view class="hero-icon"><text>照</text></view>
+    <text class="hero-heading">从一张照片开始</text>
+    <text class="muted">可拍摄或从相册选择。照片仅在本机处理，不会上传。</text>
+    <button class="primary" data-id="one-inch" bindtap="openLab">制作一寸证件照</button>
   </view>
-  <text class="section">规格草稿</text>
-  <view class="warning">以下条目尚未完成用途核验，不可用于正式制作或报名提交。</view>
-  <view wx:for="{{specs}}" wx:key="id" class="panel" data-id="{{item.id}}" bindtap="openSpec">
-    <view class="row"><text>{{item.name}}</text><text class="muted">待核验 →</text></view>
-    <text class="muted">{{item.pixels.width}} × {{item.pixels.height}} px · {{item.scope.channel}}</text>
+
+  <view class="section-heading">
+    <text class="section-title">常用尺寸</text>
+    <text class="muted">打印尺寸及像素为 300 DPI 参考值</text>
   </view>
-  <privacy-consent id="privacy" />
+  <view class="preset-grid">
+    <view wx:for="{{presets}}" wx:key="id" class="preset-card" data-id="{{item.id}}" bindtap="openLab">
+      <text class="preset-name">{{item.name}}</text>
+      <text class="preset-size">{{item.pixelLabel}}</text>
+      <text class="preset-print">{{item.printLabel}}</text>
+    </view>
+  </view>
+  <text class="footnote">不同证件或办理渠道可能有单独要求，使用前请以办理方说明为准。</text>
 </view>

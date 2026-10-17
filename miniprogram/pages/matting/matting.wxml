@@ -1,23 +1,24 @@
 <view class="page">
-  <text class="eyebrow">NANYI PHOTO / DEVICE TEST</text>
-  <text class="title">给照片换个底色。</text>
-  <view class="warning">仅限本人／已获授权的私有开发测试。照片副本会发往你指定的本机后端；未接正式内容审核，不用于报名提交、不保证 DPI 或发丝画质。</view>
+  <text class="eyebrow">南一科技 · 进阶体验</text>
+  <text class="title">本地与模型效果对比</text>
+  <view class="warning">本页仅用于对比本机色键处理与私有模型效果，不是普通编辑必需步骤。照片副本会发送到你指定的本机服务，勿用于正式证件提交。</view>
   <view wx:if="{{!connected}}" class="panel">
-    <text class="section">连接你的本机后端</text>
+    <text class="section">连接你的私有服务</text>
     <input class="connection-input" disabled="{{busy}}" value="{{baseUrlText}}" data-key="baseUrlText" bindinput="editConnection" placeholder="http://192.168.1.20:8000" maxlength="100" />
     <input class="connection-input" password="{{true}}" disabled="{{busy}}" value="{{tokenText}}" data-key="tokenText" bindinput="editConnection" placeholder="本机 NP_DEV_TOKEN 开发令牌" maxlength="128" />
-    <text class="muted">手机与电脑使用同一 Wi-Fi。开发令牌仅留在本页内存，不保存为账号凭证，不写日志。</text>
-    <button class="primary" disabled="{{busy}}" loading="{{busy}}" bindtap="connect">检查真实模型与连接</button>
+    <text class="muted">手机与电脑需在同一 Wi-Fi。连接令牌仅在本页内存中使用，不会保存。</text>
+    <button class="primary" disabled="{{busy}}" loading="{{busy}}" bindtap="connect">检查连接</button>
   </view>
   <view>
     <text wx:if="{{connected}}" class="muted">真实模型：{{modelId}} · {{stateText}}</text>
     <checkbox-group bindchange="confirmConsent">
-      <label class="consent"><checkbox value="authorized" checked="{{consent}}" disabled="{{busy}}" color="#244C3B" />我确认这是本人或已获授权测试图，同意发往本机处理。</label>
+      <label class="consent"><checkbox value="authorized" checked="{{consent}}" disabled="{{busy}}" color="#244C3B" />我确认照片为本人或已获授权，并同意将处理副本发送到上述私有服务。</label>
     </checkbox-group>
-    <picker range="{{presets}}" range-key="name" disabled="{{busy}}" value="{{presetIndex}}" data-key="presetIndex" bindchange="changeControl">
+    <picker range="{{presets}}" range-key="displayName" disabled="{{busy}}" value="{{presetIndex}}" data-key="presetIndex" bindchange="changeControl">
       <view class="panel row"><text>{{presets[presetIndex].name}}</text><text>切换 ↓</text></view>
     </picker>
-    <view class="canvas-wrap"><canvas id="photo" type="2d" class="photo work-canvas" style="height:{{previewHeight}}px" /></view>
+    <text wx:if="{{hasPhoto}}" class="muted">下方预览：查看本地结果时，可先在原图背景处点按取样。</text>
+    <view class="canvas-wrap"><canvas id="photo" type="2d" class="photo work-canvas" style="height:{{previewHeight}}px" bindtap="sampleLocalBackground" /></view>
     <canvas id="upload" type="2d" class="upload work-canvas" />
     <view wx:if="{{progressVisible}}" class="processing-progress">
       <view class="row progress-heading">
@@ -36,14 +37,26 @@
     <text wx:if="{{canvasLoading}}" class="muted">正在初始化预览与上传画布…</text>
     <text wx:if="{{canvasError}}" class="error">{{canvasError}}</text>
     <button wx:if="{{canvasError}}" class="secondary" bindtap="retryCanvas" disabled="{{busy || canvasLoading}}">重新初始化画布</button>
-    <button class="primary" bindtap="choosePhoto" disabled="{{busy || !consent || !connected || !canvasReady}}">{{canvasLoading ? '正在准备画布…' : (hasPhoto ? '更换照片并重新抠图' : '选择照片并真实抠图')}}</button>
+    <button class="primary" bindtap="choosePhoto" disabled="{{busy || !consent || !connected || !canvasReady}}">{{canvasLoading ? '正在准备画布…' : (hasPhoto ? '更换照片并重新处理' : '选择照片并开始对比')}}</button>
     <button wx:if="{{processing}}" class="secondary" bindtap="cancelProcessing">取消本次处理</button>
     <view wx:if="{{hasResult}}" class="panel">
+      <text class="section">查看处理结果</text>
+      <view class="compare-modes">
+        <button class="secondary {{showMode === 'original' ? 'selected' : ''}}" data-mode="original" bindtap="setPreviewMode">原图</button>
+        <button class="secondary {{showMode === 'local' ? 'selected' : ''}}" data-mode="local" bindtap="setPreviewMode" disabled="{{!localResultReady}}">本机处理</button>
+        <button class="secondary {{showMode === 'model' ? 'selected' : ''}}" data-mode="model" bindtap="setPreviewMode">模型处理</button>
+      </view>
+      <view class="local-compare">
+        <text class="section">生成本机色键结果</text>
+        <text class="muted">在上方照片背景处点按取样（{{localKeySampled ? localKeyColor : '尚未取样'}}），再生成本机处理结果。此结果不会上传。</text>
+        <slider disabled="{{busy || !localPixelAccessReady}}" min="0" max="180" step="5" value="{{localTolerance}}" bindchange="changeLocalTolerance" activeColor="#244C3B" />
+        <text class="muted">颜色容差 {{localTolerance}}</text>
+        <button class="secondary" disabled="{{busy || !localPixelAccessReady || !localKeySampled}}" bindtap="runLocalComparison">生成本机结果</button>
+      </view>
       <text class="section">背景颜色</text>
       <picker range="{{backgrounds}}" range-key="name" value="{{backgroundIndex}}" disabled="{{busy}}" data-key="backgroundIndex" bindchange="changeControl">
         <view class="row"><text>{{backgrounds[backgroundIndex].name}}</text><text>白／蓝／红 ↓</text></view>
       </picker>
-      <button class="secondary" disabled="{{busy}}" bindtap="toggleOriginal">{{showOriginal ? '返回换底预览' : '对比原图'}}</button>
       <text class="muted">缩放 {{zoom}}%</text>
       <slider disabled="{{busy}}" min="100" max="300" value="{{zoom}}" data-key="zoom" bindchange="changeControl" />
       <text class="muted">横向位置</text>
@@ -58,12 +71,12 @@
         <input class="byte-input" type="number" disabled="{{busy}}" value="{{minBytesText}}" data-key="minBytesText" bindinput="changeBytes" placeholder="最小 bytes（可空）" maxlength="8" />
         <input class="byte-input" type="number" disabled="{{busy}}" value="{{maxBytesText}}" data-key="maxBytesText" bindinput="changeBytes" placeholder="最大 bytes（可空）" maxlength="8" />
       </view>
-      <text class="muted">更换底色／构图仅在本机重绘，不重复上传或推理。推理副本最长边 1280、最多 100 万像素；源图留本机，但本批不保证原图级发丝质量。</text>
-      <button class="primary" disabled="{{busy}}" bindtap="exportPhoto">导出换底照片并读回验证</button>
+      <text class="muted">更换底色和构图仅在本机重绘，不会再次上传。对比工具返回的本机和模型结果不代表特定用途验收。</text>
+      <button class="primary" disabled="{{busy}}" bindtap="exportPhoto">导出模型处理结果</button>
     </view>
     <view wx:if="{{evidence}}" class="panel">
       <text>{{evidence.width}} × {{evidence.height}} px · {{evidence.format}} · {{evidence.bytes}} bytes</text>
-      <button class="primary" disabled="{{busy}}" bindtap="save">保存测试照片到相册</button>
+      <button class="primary" disabled="{{busy}}" bindtap="save">保存对比结果</button>
     </view>
   </view>
   <text wx:if="{{error}}" class="error">{{error}}</text>

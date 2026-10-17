@@ -1,45 +1,81 @@
 <view class="page">
-  <text class="eyebrow">DEVICE EXPORT / POC</text>
-  <text class="title">本地导出验证</text>
-  <view class="warning">只做裁剪和缩放，不抠图、不换底、不上传。测试图片不代表合格证件照，也不保证 DPI 或相册保存后的元数据。</view>
-  <text class="muted storage-note">导出会创建应用私有中间文件；替换、失败或退出时清理。异常退出可能留下文件，下次导出前会清扫。本功能不建立历史相册。</text>
-  <picker disabled="{{busy}}" range="{{presets}}" range-key="name" value="{{presetIndex}}" bindchange="changePreset">
-    <view class="panel row"><text>{{presets[presetIndex].name}}</text><text>切换 ↓</text></view>
+  <text class="eyebrow">南一科技 · 南一证件照</text>
+  <text class="title">编辑证件照</text>
+  <text class="muted">选择照片后，可调整尺寸和构图、替换背景并导出。照片在本机处理，不会上传。</text>
+  <picker disabled="{{busy}}" range="{{presets}}" range-key="displayName" value="{{presetIndex}}" bindchange="changePreset">
+    <view class="panel row"><view><text>{{presets[presetIndex].name}}</text><text class="preset-detail">{{presets[presetIndex].pixelLabel}} · {{presets[presetIndex].printLabel}}</text></view><text>更改 ↓</text></view>
   </picker>
-  <view class="canvas-wrap"><canvas id="photo" type="2d" class="photo" style="height:{{previewHeight}}px" /></view>
-  <button class="primary" bindtap="choosePhoto" disabled="{{busy}}">{{hasPhoto ? '更换照片' : '选择照片'}}</button>
+  <text class="muted">常见打印参考尺寸，按 300 DPI 换算；具体要求请以办理方说明为准。</text>
+  <view class="canvas-wrap">
+    <canvas id="photo" type="2d" class="photo" style="height:{{previewHeight}}px"
+      bindtap="sampleBackground" bindtouchstart="startBrush" bindtouchmove="moveBrush"
+      bindtouchend="endBrush" bindtouchcancel="endBrush" />
+  </view>
+  <button class="primary" bindtap="choosePhoto" disabled="{{busy}}">{{hasPhoto ? '更换照片' : '拍摄或选择照片'}}</button>
   <view wx:if="{{hasPhoto}}" class="panel">
-    <text class="section">导出约束测试</text>
-    <picker disabled="{{busy}}" range="{{formats}}" value="{{formatIndex}}" bindchange="changeFormat">
-      <view class="row"><text>实际文件格式</text><text>{{formats[formatIndex]}} ↓</text></view>
-    </picker>
-    <text class="muted">文件字节数（bytes），留空表示不限。这里不将 KB 自动换算成 KiB。</text>
-    <view class="byte-range">
-      <input class="byte-input" type="number" maxlength="8" disabled="{{busy}}" value="{{minBytesText}}" data-key="minBytesText" bindinput="changeByteRange" placeholder="最小字节数" />
-      <text>—</text>
-      <input class="byte-input" type="number" maxlength="8" disabled="{{busy}}" value="{{maxBytesText}}" data-key="maxBytesText" bindinput="changeByteRange" placeholder="最大字节数" />
+    <text class="section">更换背景</text>
+    <text class="muted">纯色背景照片可点按背景取样并抠除。照片背景越均匀、与人物反差越明显，处理效果越稳定；复杂边缘可用修边工具调整。</text>
+    <text class="muted">取样色：{{keySampled ? keyColorHex : '请在照片背景处点按'}} · 颜色容差 {{keyTolerance}}</text>
+    <slider disabled="{{busy}}" min="0" max="180" step="5" value="{{keyTolerance}}" bindchange="changeKeyTolerance" activeColor="#244C3B" />
+    <text class="muted">颜色容差 {{keyTolerance}}</text>
+    <button class="primary" bindtap="processBackground" disabled="{{busy || !pixelAccessReady}}" loading="{{busy}}">
+      {{backgroundRemoved ? '重新抠除背景' : '在本机抠除背景'}}
+    </button>
+    <text wx:if="{{backgroundRemoved}}" class="muted">已生成本地蒙版。可选下面的背景色；若边缘不准，用擦除/恢复笔修补。</text>
+    <view wx:if="{{backgroundRemoved}}" class="repair-tools">
+      <view class="repair-mode-heading">
+        <text class="repair-mode-title">修边工具</text>
+        <text class="repair-mode-status">{{brushMode === 'erase' ? '擦除背景' : (brushMode === 'restore' ? '恢复人物' : '已结束修边')}}</text>
+      </view>
+      <view class="repair-mode-options">
+        <button class="repair-mode-button {{brushMode === 'erase' ? 'selected' : ''}}" bindtap="setBrushMode" data-mode="erase" disabled="{{busy}}">
+          <text wx:if="{{brushMode === 'erase'}}" class="repair-check">✓</text><text>擦除背景</text>
+        </button>
+        <button class="repair-mode-button {{brushMode === 'restore' ? 'selected' : ''}}" bindtap="setBrushMode" data-mode="restore" disabled="{{busy}}">
+          <text wx:if="{{brushMode === 'restore'}}" class="repair-check">✓</text><text>恢复人物</text>
+        </button>
+        <button class="repair-mode-button {{brushMode === 'none' ? 'selected' : ''}}" bindtap="setBrushMode" data-mode="none" disabled="{{busy}}">
+          <text wx:if="{{brushMode === 'none'}}" class="repair-check">✓</text><text>结束修边</text>
+        </button>
+      </view>
+      <text class="muted repair-instruction">{{brushMode === 'erase' ? '拖动照片，擦除误保留的背景。' : (brushMode === 'restore' ? '拖动照片，恢复被误删的人物区域。' : '选择擦除或恢复工具后，在照片上拖动修补。')}}</text>
+      <text class="muted repair-size-label">笔刷大小 {{brushSize}} px</text>
+      <slider disabled="{{busy}}" min="4" max="60" step="2" value="{{brushSize}}" bindchange="changeBrushSize" activeColor="#244C3B" />
     </view>
-    <text class="muted">JPEG 有约束时最多尝试 8 次，质量范围 0.55–0.92；不改变目标像素、不填充凑大小。PNG 只导出一次，超出范围会明确失败。质量范围仅供 PoC 实测。</text>
+    <picker disabled="{{busy}}" range="{{backgrounds}}" range-key="name" value="{{backgroundIndex}}" bindchange="changeBackground">
+      <view class="row"><text>成品背景色</text><text>{{backgrounds[backgroundIndex].name}} ↓</text></view>
+    </picker>
+    <text class="section">调整构图</text>
     <text class="muted">缩放 {{zoom}}%</text>
     <slider disabled="{{busy}}" min="100" max="300" value="{{zoom}}" data-key="zoom" bindchange="changeTransform" activeColor="#244C3B" />
     <text class="muted">横向位置</text>
     <slider disabled="{{busy}}" min="0" max="100" value="{{panX}}" data-key="panX" bindchange="changeTransform" activeColor="#244C3B" />
     <text class="muted">纵向位置</text>
     <slider disabled="{{busy}}" min="0" max="100" value="{{panY}}" data-key="panY" bindchange="changeTransform" activeColor="#244C3B" />
-    <button class="secondary" bindtap="reset" disabled="{{busy}}">重置构图</button>
-    <button class="primary" bindtap="exportPhoto" disabled="{{busy}}" loading="{{busy}}">导出并验证文件</button>
+    <button class="secondary" bindtap="reset" disabled="{{busy}}">重置构图与背景处理</button>
+    <text class="section export-section">导出设置</text>
+    <picker disabled="{{busy}}" range="{{formats}}" value="{{formatIndex}}" bindchange="changeFormat">
+      <view class="row"><text>实际文件格式</text><text>{{formats[formatIndex]}} ↓</text></view>
+    </picker>
+    <text class="muted">文件大小范围（KB），1 KB 按 1024 bytes 计算；留空表示不限。</text>
+    <view class="byte-range">
+      <input class="byte-input" type="number" maxlength="5" disabled="{{busy}}" value="{{minKilobytesText}}" data-key="minKilobytesText" bindinput="changeByteRange" placeholder="最小 KB" />
+      <text>—</text>
+      <input class="byte-input" type="number" maxlength="5" disabled="{{busy}}" value="{{maxKilobytesText}}" data-key="maxKilobytesText" bindinput="changeByteRange" placeholder="最大 KB" />
+    </view>
+    <text class="muted">文件格式可选 JPEG 或 PNG。若指定大小范围，工具会检查导出结果；无法满足时会提示调整，不会擅自改动目标像素。</text>
+    <button class="primary" bindtap="exportPhoto" disabled="{{busy}}" loading="{{busy}}">导出照片</button>
   </view>
   <view wx:if="{{evidence}}" class="panel">
-    <text class="section">临时文件校验通过</text>
-    <text>{{evidence.width}} × {{evidence.height}} px · {{evidence.format}} · {{evidence.bytes}} bytes</text>
-    <text class="muted">编码 {{evidence.attempts}} 次<text wx:if="{{evidence.format === 'jpeg'}}"> · quality {{evidence.quality}}</text>；像素、真实格式与字节边界均已读回校验。</text>
-    <text class="muted">这是保存相册前的文件数据。相册保存后的实际文件与 DPI，需要真机另行验证。</text>
-    <button class="primary" bindtap="save" disabled="{{busy}}">保存测试图片</button>
+    <text class="section">照片已准备好</text>
+    <text>{{evidence.width}} × {{evidence.height}} px · {{evidence.format}} · {{evidence.kilobytes}} KB</text>
+    <text class="muted">保存前已检查图片尺寸、格式和文件大小。</text>
+    <button class="primary" bindtap="save" disabled="{{busy}}">保存照片</button>
   </view>
   <text wx:if="{{error}}" class="error">{{error}}</text>
   <view wx:if="{{cleanupPending || cleanupBlocked}}" class="warning cleanup-warning">
-    <text>私有中间文件清理未完成<text wx:if="{{cleanupPending}}">（{{cleanupPending}} 个）</text>；清理前暂停新导出。</text>
-    <button class="secondary" bindtap="retryCleanupAction" disabled="{{busy}}">重试临时文件清理</button>
+    <text>暂时无法清理本次编辑文件，已暂停新导出。</text>
+    <button class="secondary" bindtap="retryCleanupAction" disabled="{{busy}}">重试</button>
   </view>
   <button wx:if="{{permissionDenied}}" class="secondary" bindtap="openSettings">主动打开相册权限设置</button>
   <privacy-consent id="privacy" />

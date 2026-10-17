@@ -1,2 +1,19 @@
-.panel .section { margin-top: 0; }
-.row { margin-bottom: 16rpx; font-size: 29rpx; }
+.home { padding-top: 28rpx; }
+.brand { display: flex; align-items: center; gap: 18rpx; margin-bottom: 40rpx; }
+.brand-mark { width: 76rpx; height: 76rpx; display: flex; align-items: center; justify-content: center; border-radius: 22rpx; background: #244c3b; color: #fff; box-shadow: 0 8rpx 18rpx rgba(36, 76, 59, .16); }
+.brand-mark text { font-size: 28rpx; font-weight: 700; letter-spacing: 2rpx; }
+.brand-copy { display: flex; flex-direction: column; gap: 2rpx; }
+.brand-company { color: #66776c; font-size: 22rpx; letter-spacing: 2rpx; }
+.brand-name { color: #23352e; font-size: 30rpx; font-weight: 650; }
+.hero-card { margin-top: 36rpx; padding: 34rpx; border: 1rpx solid #e2e6df; border-radius: 24rpx; background: #fff; }
+.hero-icon { width: 70rpx; height: 70rpx; display: flex; justify-content: center; align-items: center; border-radius: 20rpx; background: #e8ede5; color: #244c3b; font-size: 32rpx; }
+.hero-heading { display: block; margin-top: 24rpx; color: #23352e; font-size: 32rpx; font-weight: 600; }
+.hero-card .muted { display: block; margin-top: 12rpx; }
+.section-heading { display: flex; flex-direction: column; gap: 8rpx; margin: 42rpx 0 18rpx; }
+.section-title { font-size: 32rpx; font-weight: 600; }
+.preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; }
+.preset-card { display: flex; flex-direction: column; gap: 10rpx; min-height: 130rpx; padding: 22rpx; border: 1rpx solid #e2e6df; border-radius: 16rpx; background: #fff; }
+.preset-name { color: #23352e; font-size: 27rpx; font-weight: 600; }
+.preset-size { color: #244c3b; font-size: 24rpx; }
+.preset-print { color: #77867b; font-size: 22rpx; }
+.footnote { display: block; margin: 24rpx 4rpx 0; color: #77867b; font-size: 22rpx; line-height: 1.7; }

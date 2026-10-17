@@ -26,6 +26,24 @@ function parseByteRange(minimum = "", maximum = "") {
   return range;
 }
 
+function parseKilobyteRange(minimum = "", maximum = "") {
+  const parse = (text) => {
+    if (typeof text !== "string") throw new Error("INVALID_EXPORT");
+    text = text.trim();
+    if (!text) return null;
+    if (!/^\d+$/.test(text)) throw new Error("INVALID_EXPORT");
+    const kilobytes = Number(text);
+    const bytes = kilobytes * 1024;
+    if (!Number.isSafeInteger(bytes) || kilobytes < 1 || bytes > MAX_LAB_BYTES) {
+      throw new Error("INVALID_EXPORT");
+    }
+    return bytes;
+  };
+  const range = { minBytes: parse(minimum), maxBytes: parse(maximum) };
+  validateFile({ format: "jpeg", ...range });
+  return range;
+}
+
 // Platform calls are injected so byte constraints and cleanup can be tested
 // without claiming that Node fixtures exercise the WeChat encoder.
 async function exportWithConstraints({
@@ -74,4 +92,4 @@ async function exportWithConstraints({
   throw new Error("EXPORT_SIZE_OUT_OF_BOUNDS");
 }
 
-module.exports = { MAX_LAB_BYTES, parseByteRange, exportWithConstraints };
+module.exports = { MAX_LAB_BYTES, parseByteRange, parseKilobyteRange, exportWithConstraints };

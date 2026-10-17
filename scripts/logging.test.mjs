@@ -182,6 +182,22 @@ test("lab logs exact export validation code and never logs temporary image paths
   } finally { logger.configure({ enabled: false }); }
 });
 
+test("local keying diagnostics retain bounded measurements but never sampled colors or pixels", () => {
+  const diagnostics = createLogger({ enabled: true, sink() {} });
+  diagnostics.emit("lab.local_key_completed", "INFO", {
+    width: 295, height: 413, tolerance: 60, durationMs: 128.4567,
+    keyColor: "#00FF00", imageData: "RAW-photo-pixels"
+  });
+  const [event] = diagnostics.snapshot();
+  assert.equal(event.event, "lab.local_key_completed");
+  assert.equal(event.width, 295);
+  assert.equal(event.height, 413);
+  assert.equal(event.tolerance, 60);
+  assert.equal(event.durationMs, 128.457);
+  assert.ok(!JSON.stringify(event).includes("#00FF00"));
+  assert.ok(!JSON.stringify(event).includes("RAW-photo-pixels"));
+});
+
 test("lab photo/save errors classify permissions and do not retain raw wx errors", async () => {
   logger.configure({ enabled: true });
   try {
