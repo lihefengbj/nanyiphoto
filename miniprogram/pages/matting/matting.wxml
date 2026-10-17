@@ -1,0 +1,73 @@
+<view class="page">
+  <text class="eyebrow">NANYI PHOTO / DEVICE TEST</text>
+  <text class="title">给照片换个底色。</text>
+  <view class="warning">仅限本人／已获授权的私有开发测试。照片副本会发往你指定的本机后端；未接正式内容审核，不用于报名提交、不保证 DPI 或发丝画质。</view>
+  <view wx:if="{{!connected}}" class="panel">
+    <text class="section">连接你的本机后端</text>
+    <input class="connection-input" disabled="{{busy}}" value="{{baseUrlText}}" data-key="baseUrlText" bindinput="editConnection" placeholder="http://192.168.1.20:8000" maxlength="100" />
+    <input class="connection-input" password="{{true}}" disabled="{{busy}}" value="{{tokenText}}" data-key="tokenText" bindinput="editConnection" placeholder="本机 NP_DEV_TOKEN 开发令牌" maxlength="128" />
+    <text class="muted">手机与电脑使用同一 Wi-Fi。开发令牌仅留在本页内存，不保存为账号凭证，不写日志。</text>
+    <button class="primary" disabled="{{busy}}" loading="{{busy}}" bindtap="connect">检查真实模型与连接</button>
+  </view>
+  <view>
+    <text wx:if="{{connected}}" class="muted">真实模型：{{modelId}} · {{stateText}}</text>
+    <checkbox-group bindchange="confirmConsent">
+      <label class="consent"><checkbox value="authorized" checked="{{consent}}" disabled="{{busy}}" color="#244C3B" />我确认这是本人或已获授权测试图，同意发往本机处理。</label>
+    </checkbox-group>
+    <picker range="{{presets}}" range-key="name" disabled="{{busy}}" value="{{presetIndex}}" data-key="presetIndex" bindchange="changeControl">
+      <view class="panel row"><text>{{presets[presetIndex].name}}</text><text>切换 ↓</text></view>
+    </picker>
+    <view class="canvas-wrap"><canvas id="photo" type="2d" class="photo work-canvas" style="height:{{previewHeight}}px" /></view>
+    <canvas id="upload" type="2d" class="upload work-canvas" />
+    <view wx:if="{{progressVisible}}" class="processing-progress">
+      <view class="row progress-heading">
+        <text>{{progressTitle}}</text><text class="progress-time">已等待 {{elapsedSeconds}} 秒</text>
+      </view>
+      <view class="progress-track"><view class="progress-runner" /></view>
+      <view class="progress-steps">
+        <text class="{{progressStep === 1 ? 'step-current' : (progressStep > 1 ? 'step-done' : '')}}">准备照片</text>
+        <text class="{{progressStep === 2 ? 'step-current' : (progressStep > 2 ? 'step-done' : '')}}">上传副本</text>
+        <text class="{{progressStep === 3 ? 'step-current' : (progressStep > 3 ? 'step-done' : '')}}">模型抠图</text>
+        <text class="{{progressStep === 4 ? 'step-current' : ''}}">结果预览</text>
+      </view>
+      <text class="progress-hint">{{progressHint}}</text>
+      <text wx:if="{{progressSlow}}" class="progress-hint">耗时随照片尺寸和后端负载变化；如不想继续等待，可取消本次处理。</text>
+    </view>
+    <text wx:if="{{canvasLoading}}" class="muted">正在初始化预览与上传画布…</text>
+    <text wx:if="{{canvasError}}" class="error">{{canvasError}}</text>
+    <button wx:if="{{canvasError}}" class="secondary" bindtap="retryCanvas" disabled="{{busy || canvasLoading}}">重新初始化画布</button>
+    <button class="primary" bindtap="choosePhoto" disabled="{{busy || !consent || !connected || !canvasReady}}">{{canvasLoading ? '正在准备画布…' : (hasPhoto ? '更换照片并重新抠图' : '选择照片并真实抠图')}}</button>
+    <button wx:if="{{processing}}" class="secondary" bindtap="cancelProcessing">取消本次处理</button>
+    <view wx:if="{{hasResult}}" class="panel">
+      <text class="section">背景颜色</text>
+      <picker range="{{backgrounds}}" range-key="name" value="{{backgroundIndex}}" disabled="{{busy}}" data-key="backgroundIndex" bindchange="changeControl">
+        <view class="row"><text>{{backgrounds[backgroundIndex].name}}</text><text>白／蓝／红 ↓</text></view>
+      </picker>
+      <button class="secondary" disabled="{{busy}}" bindtap="toggleOriginal">{{showOriginal ? '返回换底预览' : '对比原图'}}</button>
+      <text class="muted">缩放 {{zoom}}%</text>
+      <slider disabled="{{busy}}" min="100" max="300" value="{{zoom}}" data-key="zoom" bindchange="changeControl" />
+      <text class="muted">横向位置</text>
+      <slider disabled="{{busy}}" min="0" max="100" value="{{panX}}" data-key="panX" bindchange="changeControl" />
+      <text class="muted">纵向位置</text>
+      <slider disabled="{{busy}}" min="0" max="100" value="{{panY}}" data-key="panY" bindchange="changeControl" />
+      <button class="secondary" disabled="{{busy}}" bindtap="reset">重置构图</button>
+      <picker range="{{formats}}" value="{{formatIndex}}" disabled="{{busy}}" data-key="formatIndex" bindchange="changeControl">
+        <view class="row"><text>导出格式</text><text>{{formats[formatIndex]}} ↓</text></view>
+      </picker>
+      <view class="byte-range">
+        <input class="byte-input" type="number" disabled="{{busy}}" value="{{minBytesText}}" data-key="minBytesText" bindinput="changeBytes" placeholder="最小 bytes（可空）" maxlength="8" />
+        <input class="byte-input" type="number" disabled="{{busy}}" value="{{maxBytesText}}" data-key="maxBytesText" bindinput="changeBytes" placeholder="最大 bytes（可空）" maxlength="8" />
+      </view>
+      <text class="muted">更换底色／构图仅在本机重绘，不重复上传或推理。推理副本最长边 1280、最多 100 万像素；源图留本机，但本批不保证原图级发丝质量。</text>
+      <button class="primary" disabled="{{busy}}" bindtap="exportPhoto">导出换底照片并读回验证</button>
+    </view>
+    <view wx:if="{{evidence}}" class="panel">
+      <text>{{evidence.width}} × {{evidence.height}} px · {{evidence.format}} · {{evidence.bytes}} bytes</text>
+      <button class="primary" disabled="{{busy}}" bindtap="save">保存测试照片到相册</button>
+    </view>
+  </view>
+  <text wx:if="{{error}}" class="error">{{error}}</text>
+  <button wx:if="{{cleanupPending}}" disabled="{{busy}}" class="secondary" bindtap="retryCleanup">重试清理／取消</button>
+  <button wx:if="{{error}}" class="secondary" bindtap="openSettings">打开相册权限设置</button>
+  <privacy-consent id="privacy" />
+</view>

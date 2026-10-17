@@ -2,12 +2,24 @@
   <text class="eyebrow">DEVICE EXPORT / POC</text>
   <text class="title">本地导出验证</text>
   <view class="warning">只做裁剪和缩放，不抠图、不换底、不上传。测试图片不代表合格证件照，也不保证 DPI 或相册保存后的元数据。</view>
+  <text class="muted storage-note">导出会创建应用私有中间文件；替换、失败或退出时清理。异常退出可能留下文件，下次导出前会清扫。本功能不建立历史相册。</text>
   <picker disabled="{{busy}}" range="{{presets}}" range-key="name" value="{{presetIndex}}" bindchange="changePreset">
     <view class="panel row"><text>{{presets[presetIndex].name}}</text><text>切换 ↓</text></view>
   </picker>
   <view class="canvas-wrap"><canvas id="photo" type="2d" class="photo" style="height:{{previewHeight}}px" /></view>
   <button class="primary" bindtap="choosePhoto" disabled="{{busy}}">{{hasPhoto ? '更换照片' : '选择照片'}}</button>
   <view wx:if="{{hasPhoto}}" class="panel">
+    <text class="section">导出约束测试</text>
+    <picker disabled="{{busy}}" range="{{formats}}" value="{{formatIndex}}" bindchange="changeFormat">
+      <view class="row"><text>实际文件格式</text><text>{{formats[formatIndex]}} ↓</text></view>
+    </picker>
+    <text class="muted">文件字节数（bytes），留空表示不限。这里不将 KB 自动换算成 KiB。</text>
+    <view class="byte-range">
+      <input class="byte-input" type="number" maxlength="8" disabled="{{busy}}" value="{{minBytesText}}" data-key="minBytesText" bindinput="changeByteRange" placeholder="最小字节数" />
+      <text>—</text>
+      <input class="byte-input" type="number" maxlength="8" disabled="{{busy}}" value="{{maxBytesText}}" data-key="maxBytesText" bindinput="changeByteRange" placeholder="最大字节数" />
+    </view>
+    <text class="muted">JPEG 有约束时最多尝试 8 次，质量范围 0.55–0.92；不改变目标像素、不填充凑大小。PNG 只导出一次，超出范围会明确失败。质量范围仅供 PoC 实测。</text>
     <text class="muted">缩放 {{zoom}}%</text>
     <slider disabled="{{busy}}" min="100" max="300" value="{{zoom}}" data-key="zoom" bindchange="changeTransform" activeColor="#244C3B" />
     <text class="muted">横向位置</text>
@@ -20,10 +32,15 @@
   <view wx:if="{{evidence}}" class="panel">
     <text class="section">临时文件校验通过</text>
     <text>{{evidence.width}} × {{evidence.height}} px · {{evidence.format}} · {{evidence.bytes}} bytes</text>
+    <text class="muted">编码 {{evidence.attempts}} 次<text wx:if="{{evidence.format === 'jpeg'}}"> · quality {{evidence.quality}}</text>；像素、真实格式与字节边界均已读回校验。</text>
     <text class="muted">这是保存相册前的文件数据。相册保存后的实际文件与 DPI，需要真机另行验证。</text>
     <button class="primary" bindtap="save" disabled="{{busy}}">保存测试图片</button>
   </view>
   <text wx:if="{{error}}" class="error">{{error}}</text>
+  <view wx:if="{{cleanupPending || cleanupBlocked}}" class="warning cleanup-warning">
+    <text>私有中间文件清理未完成<text wx:if="{{cleanupPending}}">（{{cleanupPending}} 个）</text>；清理前暂停新导出。</text>
+    <button class="secondary" bindtap="retryCleanupAction" disabled="{{busy}}">重试临时文件清理</button>
+  </view>
   <button wx:if="{{permissionDenied}}" class="secondary" bindtap="openSettings">主动打开相册权限设置</button>
   <privacy-consent id="privacy" />
 </view>

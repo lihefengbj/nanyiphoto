@@ -2,7 +2,8 @@
   "pages": [
     "pages/home/home",
     "pages/spec-detail/spec-detail",
-    "pages/lab/lab"
+    "pages/lab/lab",
+    "pages/matting/matting"
   ],
   "window": {
     "navigationBarTitleText": "南一证件照",

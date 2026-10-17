@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "status": "draft",
+  "dataset": {
+    "root": "../.data/poc-input",
+    "authorization": {
+      "confirmed": false,
+      "reviewedBy": "",
+      "reviewedAt": null,
+      "evidence": ""
+    },
+    "samples": [
+      {
+        "id": "sample-001",
+        "file": "sample-001.png",
+        "consentConfirmed": false,
+        "tags": ["straight_hair", "plain_background"]
+      }
+    ]
+  },
+  "models": [
+    {
+      "id": "rvm",
+      "enabled": false,
+      "version": "",
+      "codeSource": "",
+      "codeReview": {
+        "confirmed": false,
+        "reviewedBy": "",
+        "reviewedAt": null,
+        "evidence": ""
+      },
+      "weights": {
+        "file": "../.data/models/rvm.onnx",
+        "sha256": "",
+        "source": "",
+        "review": {
+          "confirmed": false,
+          "reviewedBy": "",
+          "reviewedAt": null,
+          "evidence": ""
+        }
+      },
+      "dependencyReview": {
+        "confirmed": false,
+        "reviewedBy": "",
+        "reviewedAt": null,
+        "evidence": ""
+      }
+    },
+    {
+      "id": "pp-humansegv2",
+      "enabled": false,
+      "version": "",
+      "codeSource": "",
+      "codeReview": {
+        "confirmed": false,
+        "reviewedBy": "",
+        "reviewedAt": null,
+        "evidence": ""
+      },
+      "weights": {
+        "file": "../.data/models/pp-humansegv2.onnx",
+        "sha256": "",
+        "source": "",
+        "review": {
+          "confirmed": false,
+          "reviewedBy": "",
+          "reviewedAt": null,
+          "evidence": ""
+        }
+      },
+      "dependencyReview": {
+        "confirmed": false,
+        "reviewedBy": "",
+        "reviewedAt": null,
+        "evidence": ""
+      }
+    },
+    {
+      "id": "modnet",
+      "enabled": false,
+      "version": "",
+      "codeSource": "",
+      "codeReview": {
+        "confirmed": false,
+        "reviewedBy": "",
+        "reviewedAt": null,
+        "evidence": ""
+      },
+      "weights": {
+        "file": "../.data/models/modnet.onnx",
+        "sha256": "",
+        "source": "",
+        "review": {
+          "confirmed": false,
+          "reviewedBy": "",
+          "reviewedAt": null,
+          "evidence": ""
+        }
+      },
+      "dependencyReview": {
+        "confirmed": false,
+        "reviewedBy": "",
+        "reviewedAt": null,
+        "evidence": ""
+      }
+    }
+  ],
+  "run": {
+    "pythonVersion": "3.14.5",
+    "concurrency": 1,
+    "intraOpThreads": 1,
+    "interOpThreads": 1,
+    "warmupRuns": 2,
+    "repetitions": 1,
+    "maxInputBytes": 10485760,
+    "maxWeightsBytes": 4294967296
+  }
+}

@@ -169,6 +169,38 @@ def test_formatter_uses_allowlist_even_for_direct_logger_calls():
     assert resource_ref("alice") is None
 
 
+def test_child_error_details_are_allowlisted_even_for_direct_records():
+    record = logging.LogRecord(
+        "test",
+        logging.ERROR,
+        "",
+        1,
+        {
+            "event": "inference.failed",
+            "inferenceStage": "infer",
+            "_error_details": {
+                "errorType": "BrokenPipeError",
+                "message": "private-token-and-photo",
+                "frames": [
+                    {"module": "matting_lab.py", "line": 123, "locals": "private-token-and-photo"},
+                    {"module": "/private/photo.jpg", "line": 1},
+                    {"module": "matting_lab.py", "line": -1},
+                ],
+            },
+        },
+        (),
+        None,
+    )
+    result = json.loads(JsonFormatter().format(record))
+    assert result["errorType"] == "BrokenPipeError"
+    assert result["inferenceStage"] == "infer"
+    assert result["frames"] == [{"module": "matting_lab.py", "line": 123}]
+    assert "private-token-and-photo" not in json.dumps(result)
+    record.msg["_error_details"]["errorType"] = "private-token-and-photo"
+    record.msg["inferenceStage"] = "private-token-and-photo"
+    assert "private-token-and-photo" not in JsonFormatter().format(record)
+
+
 def test_rotating_files_are_bounded_and_valid_json(settings, tmp_path):
     path = tmp_path / "logs" / "api.jsonl"
     logger = EventLogger(

@@ -1,4 +1,5 @@
-# Python 3.12.12 / local development + tests; verified 2026-10-16.
+# Python 3.14.5 / local development + tests; verified 2026-10-17.
+# Package versions unchanged from the Python 3.12.12 lock verified 2026-10-16.
 # Exact versions; editable project install is a separate step.
 annotated-doc==0.0.5
 annotated-types==0.8.0

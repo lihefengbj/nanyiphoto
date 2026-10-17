@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nanyiphoto-api"
-version = "0.1.0"
+version = "0.2.0rc1"
 description = "Local contract implementation for the Nanyi ID photo mini program"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.14,<3.15"
 dependencies = [
   "fastapi>=0.115,<1",
   "uvicorn>=0.34,<1",
@@ -17,6 +17,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "httpx2>=2.13,<3", "ruff>=0.11,<1"]
+model = [
+  "numpy==2.5.4",
+  "onnx==1.20.0",
+  "onnxruntime==1.28.0; sys_platform == 'linux'",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -27,7 +32,7 @@ testpaths = ["tests"]
 addopts = "-q"
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 110
 
 [tool.ruff.lint]

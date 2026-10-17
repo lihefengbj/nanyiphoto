@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "model": {
+    "id": "modnet",
+    "enabled": false,
+    "version": "",
+    "codeSource": "https://github.com/ZHKKKe/MODNet",
+    "codeReview": {"confirmed": false, "reviewedBy": "", "reviewedAt": null, "evidence": ""},
+    "dependencyReview": {"confirmed": false, "reviewedBy": "", "reviewedAt": null, "evidence": ""},
+    "weights": {
+      "file": "models/modnet.onnx",
+      "sha256": "",
+      "source": "",
+      "review": {"confirmed": false, "reviewedBy": "", "reviewedAt": null, "evidence": ""}
+    }
+  }
+}

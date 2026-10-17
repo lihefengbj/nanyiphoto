@@ -6,6 +6,9 @@ const events = new Set([
   "lab.export_completed", "lab.export_failed", "lab.save_completed", "lab.save_failed", "lab.cleanup_failed"
 ]);
 const codes = new Set([
+  "INVALID_LAB_CONFIG", "INVALID_LAB_RESULT", "MATTING_LAB_DISABLED", "LOCAL_MODEL_NOT_CONFIGURED",
+  "LOCAL_MODEL_REVIEW_REQUIRED", "MODEL_RUNTIME_UNAVAILABLE", "LAB_CONSENT_REQUIRED", "INVALID_LAB_REQUEST",
+  "WEIGHTS_HASH_MISMATCH", "MODEL_LOAD_FAILED", "TIMEOUT",
   "API_FAILED", "NETWORK_FAILED", "LOCAL_TOKEN_NOT_CONFIGURED", "CLOUD_NOT_CONFIGURED",
   "UNAUTHENTICATED", "NOT_FOUND", "RATE_LIMITED", "UPLOAD_TOO_LARGE", "UPLOAD_EXPIRED",
   "UPLOAD_IMMUTABLE", "UPLOAD_NOT_READY", "IDEMPOTENCY_CONFLICT", "SPEC_VERSION_CHANGED",
@@ -74,11 +77,15 @@ function createLogger(options = {}) {
           event: events.has(event) ? event : "diagnostic.invalid"
         };
         // No object traversal, free-form messages, URLs, request data or identity fields.
-        for (const key of ["status", "durationMs", "width", "height", "bytes"]) {
+        for (const key of ["status", "durationMs", "width", "height", "bytes", "attempts"]) {
           const value = fields[key];
           if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1e12) {
             record[key] = Math.round(value * 1000) / 1000;
           }
+        }
+        if (typeof fields.quality === "number" && Number.isFinite(fields.quality)
+            && fields.quality > 0 && fields.quality <= 1) {
+          record.quality = Math.round(fields.quality * 1000) / 1000;
         }
         if (typeof fields.requestId === "string" && /^[a-f0-9]{32}$/.test(fields.requestId)) {
           record.requestId = fields.requestId;

@@ -43,6 +43,16 @@ EVENTS = {
     "cleanup.failed",
 }
 ERROR_CODES = {
+    "MATTING_LAB_DISABLED",
+    "LOCAL_MODEL_NOT_CONFIGURED",
+    "LOCAL_MODEL_REVIEW_REQUIRED",
+    "LOCAL_TOKEN_NOT_CONFIGURED",
+    "LAB_CONSENT_REQUIRED",
+    "INVALID_LAB_REQUEST",
+    "MODEL_RUNTIME_UNAVAILABLE",
+    "WEIGHTS_HASH_MISMATCH",
+    "MODEL_LOAD_FAILED",
+    "TIMEOUT",
     "INTERNAL_ERROR",
     "HTTP_ERROR",
     "VALIDATION_FAILED",
@@ -83,6 +93,10 @@ ERROR_CODES = {
     "WORKER_LEASE_EXHAUSTED",
 }
 ROUTES = {
+    "/api/lab/status",
+    "/api/lab/jobs",
+    "/api/lab/jobs/{job_id}",
+    "/api/lab/jobs/{job_id}/cutout",
     "/health/live",
     "/health/ready",
     "/api/specs",
@@ -111,6 +125,11 @@ STATES = {
 }
 LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR"}
 MODULES = {
+    "edge_refinement.py",
+    "reference_resize.py",
+    "matting_worker.py",
+    "local_model.py",
+    "matting_lab.py",
     "catalog.py",
     "config.py",
     "db.py",
@@ -118,9 +137,28 @@ MODULES = {
     "main.py",
     "middleware.py",
     "providers.py",
+    "onnx_provider.py",
     "service.py",
     "storage.py",
 }
+ERROR_TYPES = {
+    "Exception",
+    "DomainError",
+    "RuntimeError",
+    "ValueError",
+    "TypeError",
+    "OSError",
+    "PermissionError",
+    "FileNotFoundError",
+    "TimeoutError",
+    "KeyError",
+    "AssertionError",
+    "AttributeError",
+    "IndexError",
+    "BrokenPipeError",
+    "EOFError",
+}
+INFERENCE_STAGES = {"spawn", "wait", "read", "load", "infer", "validate", "write"}
 
 
 def resource_ref(value):
@@ -141,21 +179,7 @@ def safe_error(error):
     kind = name if type(error).__module__ == "builtins" else "Exception"
     if isinstance(error, DomainError):
         kind = "DomainError"
-    if kind not in {
-        "Exception",
-        "DomainError",
-        "RuntimeError",
-        "ValueError",
-        "TypeError",
-        "OSError",
-        "PermissionError",
-        "FileNotFoundError",
-        "TimeoutError",
-        "KeyError",
-        "AssertionError",
-        "AttributeError",
-        "IndexError",
-    }:
+    if kind not in ERROR_TYPES:
         kind = "Exception"
     frames = []
     package = Path(__file__).parent
@@ -164,6 +188,28 @@ def safe_error(error):
         if filename.parent == package and filename.name in MODULES:
             frames.append({"module": filename.name, "line": line})
     return {"errorType": kind, "frames": frames[-8:]}
+
+
+def safe_error_details(value):
+    """Revalidate child-process diagnostics; never accept messages or raw paths."""
+    if not isinstance(value, dict):
+        return {}
+    kind = value.get("errorType")
+    frames = value.get("frames")
+    if not isinstance(kind, str) or kind not in ERROR_TYPES or not isinstance(frames, list):
+        return {}
+    return {
+        "errorType": kind,
+        "frames": [
+            {"module": frame["module"], "line": frame["line"]}
+            for frame in frames[-8:]
+            if isinstance(frame, dict)
+            and isinstance(frame.get("module"), str)
+            and frame["module"] in MODULES
+            and type(frame.get("line")) is int
+            and 0 < frame["line"] <= 10**6
+        ],
+    }
 
 
 def safe_fields(fields):
@@ -183,6 +229,7 @@ def safe_fields(fields):
         ("environment", {"local", "test"}),
         ("errorCode", ERROR_CODES),
         ("method", {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "OTHER"}),
+        ("inferenceStage", INFERENCE_STAGES),
     ):
         value = fields.get(key)
         if isinstance(value, str) and value in allowed:
@@ -208,6 +255,7 @@ class JsonFormatter(logging.Formatter):
         # Error objects are inspected here, never interpolated by the logging machinery.
         if isinstance(fields.get("_error"), Exception):
             output.update(safe_error(fields["_error"]))
+        output.update(safe_error_details(fields.get("_error_details")))
         return json.dumps(output, ensure_ascii=True, separators=(",", ":"))
 
 
@@ -255,7 +303,17 @@ class EventLogger:
                     errorCode="LOG_FILE_UNAVAILABLE",
                 )
 
-    def emit(self, event, level="INFO", *, error=None, task_id=None, upload_id=None, **fields):
+    def emit(
+        self,
+        event,
+        level="INFO",
+        *,
+        error=None,
+        error_details=None,
+        task_id=None,
+        upload_id=None,
+        **fields,
+    ):
         if self.closed:
             return
         try:
@@ -268,6 +326,8 @@ class EventLogger:
                 payload["requestId"] = request_id.get()
             if isinstance(error, Exception):
                 payload["_error"] = error
+            if error_details is not None:
+                payload["_error_details"] = safe_error_details(error_details)
             self.logger.log(getattr(logging, level if level in LEVELS else "ERROR"), payload)
         except Exception:
             # Diagnostic failures must not change authentication, task state or delivery.

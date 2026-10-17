@@ -24,8 +24,16 @@ class Settings:
     log_file: Path | None = None
     log_max_bytes: int = 1024 * 1024
     log_backup_count: int = 3
+    matting_lab_enabled: bool = False
+    local_model_path: Path = ROOT / ".data" / "local-model.json"
+    local_model_engine: str = "onnx-reference"
 
     def __post_init__(self):
+        if type(self.matting_lab_enabled) is not bool or self.local_model_engine not in {
+            "onnx-reference",
+            "ort-cpu",
+        }:
+            raise ValueError("Invalid private matting lab configuration.")
         if self.environment not in {"local", "test"}:
             raise ValueError(
                 "Production is disabled until trusted identity, COS and shared DB adapters exist."
@@ -76,6 +84,9 @@ class Settings:
             log_file=Path(log_file) if log_file else None,
             log_max_bytes=int(os.getenv("NP_LOG_MAX_BYTES", "1048576")),
             log_backup_count=int(os.getenv("NP_LOG_BACKUP_COUNT", "3")),
+            matting_lab_enabled=os.getenv("NP_MATTING_LAB", "false").lower() == "true",
+            local_model_path=Path(os.getenv("NP_LOCAL_MODEL_PATH", str(ROOT / ".data/local-model.json"))),
+            local_model_engine=os.getenv("NP_LOCAL_MODEL_ENGINE", "onnx-reference"),
             **{
                 name: int(os.getenv(env, default))
                 for name, env, default in [

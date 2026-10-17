@@ -1,18 +1,16 @@
 import hashlib
-import io
 import json
 import time
 import uuid
 from collections.abc import Callable
 
-from PIL import Image
 from sqlalchemy import and_, func, insert, select, update
 
 from .catalog import Catalog
 from .config import Settings
 from .db import create_database, events, tasks, uploads
 from .diagnostics import EventLogger, error_code
-from .providers import MattingProvider, MattingResult
+from .providers import MattingProvider, MattingResult, validate_matting_result
 from .storage import DomainError, LocalObjectStore, normalize_image
 
 
@@ -396,19 +394,7 @@ class TaskService:
         self.cleanup()
 
     def _validate_result(self, result: MattingResult, width: int, height: int):
-        if result.width != width or result.height != height or not result.model_version:
-            raise DomainError("INVALID_MODEL_RESULT", 502)
-        for data, mode in ((result.foreground, "RGBA"), (result.alpha, "L")):
-            if len(data) > self.settings.max_upload_bytes:
-                raise DomainError("MODEL_RESULT_TOO_LARGE", 502)
-            with Image.open(io.BytesIO(data)) as image:
-                if image.format != "PNG" or image.mode != mode or image.size != (width, height):
-                    raise DomainError("INVALID_MODEL_RESULT", 502)
-                image.verify()
-            if mode == "RGBA":
-                with Image.open(io.BytesIO(data)) as foreground:
-                    if foreground.getchannel("A").getextrema() != (255, 255):
-                        raise DomainError("INVALID_FOREGROUND_ALPHA", 502)
+        validate_matting_result(result, width, height, self.settings.max_upload_bytes)
 
     def process_next(self):
         """One bounded worker step; the default app does not have a configured model."""

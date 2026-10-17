@@ -1,8 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
-import { Script, createContext } from "node:vm";
+import { loadLab } from "./helpers/load-lab.mjs";
 
 const require = createRequire(import.meta.url);
 const { createLogger, logger, platformCode, routeTemplate } = require("../miniprogram/utils/logger.js");
@@ -156,30 +155,20 @@ test("synchronous transport failures are safe and duplicate callbacks do not dup
   } finally { delete globalThis.wx; }
 });
 
-function loadLab(wx) {
-  let page;
-  const context = createContext({
-    wx, Page(value) { page = value; },
-    require(path) {
-      return path.endsWith("geometry") ? require("../miniprogram/utils/geometry.js")
-        : require("../miniprogram/utils/logger.js");
-    }
-  });
-  new Script(readFileSync(new URL("../miniprogram/pages/lab/lab.js", import.meta.url), "utf8")).runInContext(context);
-  page.data = { ...page.data };
-  page.setData = (value) => { Object.assign(page.data, value); };
-  page.alive = true;
-  return page;
-}
-
 test("lab logs exact export validation code and never logs temporary image paths", async () => {
   logger.configure({ enabled: true });
   const sensitive = "RAW-private-photo-temp-path";
   try {
     const page = loadLab({
+      env: { USER_DATA_PATH: "/private-test" },
       canvasToTempFilePath(args) { args.success({ tempFilePath: sensitive }); },
       getImageInfo(args) { args.success({ width: 1, height: 1, type: "jpeg", path: sensitive }); },
-      getFileSystemManager() { return { stat(args) { args.success({ stats: { size: 100 } }); } }; }
+      getFileSystemManager() { return {
+        readdir(args) { args.success({ files: [] }); },
+        saveFile(args) { args.success({ savedFilePath: args.filePath }); },
+        stat(args) { args.success({ stats: { size: 100 } }); },
+        unlink(args) { args.success({}); }
+      }; }
     });
     page.canvas = { width: 295, height: 413 };
     page.image = {};

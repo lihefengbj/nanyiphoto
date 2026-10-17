@@ -1,10 +1,15 @@
 <view class="page">
-  <text class="eyebrow">NANYI PHOTO / M0</text>
+  <text class="eyebrow">NANYI PHOTO / P0</text>
   <text class="title">先把每个像素做对。</text>
-  <text class="subtitle">照片制作工具正在开发。模型与正式审核尚未接入，当前可验证设备上的精确导出。</text>
+  <text class="subtitle">先验证换背景与精确导出。正式审核和报名规格仍待核验，当前为私有开发测试。</text>
+  <view class="panel">
+    <text class="section">真实抠图与换背景</text>
+    <text class="muted">连接你配置了真实权重的本机后端 → 选授权照片 → 白／蓝／红换底 → 裁剪与保存。默认后端不启用，非上线服务。</text>
+    <button class="primary" bindtap="openMatting">打开换背景实验室</button>
+  </view>
   <view class="panel">
     <text class="section">本地导出实验室</text>
-    <text class="muted">选择照片 → 裁剪缩放 → 验证像素与文件大小。无 AI、不上传、不保证 DPI。</text>
+    <text class="muted">选择照片 → 裁剪缩放 → 验证 JPEG / PNG、像素与字节范围。无 AI、不上传、不保证 DPI。</text>
     <button class="primary" bindtap="openLab">验证本机导出能力</button>
   </view>
   <text class="section">规格草稿</text>

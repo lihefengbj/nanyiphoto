@@ -1,6 +1,6 @@
 {
   "name": "nanyiphoto",
-  "version": "0.1.0",
+  "version": "0.2.0-rc.1",
   "private": true,
   "engines": { "node": ">=24 <25" },
   "scripts": {
@@ -8,6 +8,11 @@
     "check": "node scripts/validate-specs.mjs && node scripts/check-miniprogram.mjs",
     "specs:release": "node scripts/validate-specs.mjs --release",
     "miniprogram:sync": "node scripts/sync-specs.mjs",
+    "poc:check": "node scripts/model-poc.mjs --check",
+    "poc:verify": "node scripts/model-poc.mjs --verify",
+    "lab:configure": "node scripts/local-model-config.mjs",
+    "lab:download": "node scripts/download-modnet.mjs",
+    "lab:start": "node scripts/start-matting-lab.mjs",
     "smoke:api": "node scripts/smoke-api.mjs"
   }
 }

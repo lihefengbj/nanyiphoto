@@ -2,3 +2,7 @@
 .photo { width: 270px; height: 378px; max-width: 100%; }
 .panel .section { margin-top: 0; }
 .panel .muted { display: block; margin-top: 18rpx; }
+.byte-range { display: flex; align-items: center; gap: 12rpx; margin-top: 16rpx; }
+.byte-input { flex: 1; min-width: 0; height: 76rpx; padding: 0 16rpx; border: 1rpx solid #e2e6df; border-radius: 10rpx; font-size: 25rpx; }
+.cleanup-warning { margin-top: 24rpx; }
+.storage-note { display: block; margin-top: 18rpx; }

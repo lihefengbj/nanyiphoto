@@ -4,5 +4,6 @@ Page({
   openSpec(event) {
     wx.navigateTo({ url: `/pages/spec-detail/spec-detail?id=${encodeURIComponent(event.currentTarget.dataset.id)}` });
   },
-  openLab() { wx.navigateTo({ url: "/pages/lab/lab" }); }
+  openLab() { wx.navigateTo({ url: "/pages/lab/lab" }); },
+  openMatting() { wx.navigateTo({ url: "/pages/matting/matting" }); }
 });

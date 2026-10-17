@@ -1,0 +1,9 @@
+# Optional CPU ONNX/graph-validation dependencies; base backend lock is unchanged.
+# Python 3.14.5, reference engine verified on macOS x86_64.
+# ORT wheel availability checked for Linux x86_64; runtime test belongs to CI.
+numpy==2.5.4
+onnx==1.20.0
+ml_dtypes==0.6.0
+protobuf==7.36.2
+typing_extensions==4.16.0
+onnxruntime==1.28.0; sys_platform == "linux"
