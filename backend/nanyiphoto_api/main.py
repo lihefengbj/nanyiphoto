@@ -102,7 +102,7 @@ def create_app(settings: Settings | None = None, *, service: TaskService | None 
     app = DiagnosticFastAPI(
         diagnostics=task_service.diagnostics,
         title="Nanyi Photo — Local Contract API",
-        version="0.2.0-rc.1",
+        version="0.2.0-rc.2",
         lifespan=lifespan,
         docs_url="/docs" if settings.environment == "local" else None,
         redoc_url=None,
