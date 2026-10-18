@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nanyiphoto-api"
-version = "0.2.0rc3"
+version = "0.2.0rc4"
 description = "Local contract implementation for the Nanyi ID photo mini program"
 requires-python = ">=3.14,<3.15"
 dependencies = [

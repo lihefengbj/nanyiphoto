@@ -2,8 +2,7 @@
   "pages": [
     "pages/home/home",
     "pages/lab/lab",
-    "pages/other/other",
-    "pages/matting/matting"
+    "pages/other/other"
   ],
   "window": {
     "navigationBarTitleText": "南一证件照",
@@ -25,7 +24,7 @@
       },
       {
         "pagePath": "pages/other/other",
-        "text": "其他"
+        "text": "关于"
       }
     ]
   },

@@ -1,14 +1,8 @@
 <view class="page">
-  <text class="title">其他</text>
-  <text class="subtitle">可选体验功能</text>
+  <text class="title">关于南一证件照</text>
+  <text class="subtitle">由南一科技提供</text>
   <view class="panel">
-    <text class="section">本地与私有模型对比</text>
-    <text class="muted">对同一张照片分别查看本机色键处理和你配置的私有模型结果，帮助评估不同处理效果。</text>
-    <text class="privacy-note">这是进阶对比功能，需要连接你自己的本机服务。只有在本页确认授权后，缩小后的照片副本才会发送到该服务；普通本地编辑不需要连接后端。原图不会上传，也不会建立历史相册。离开页面时会尝试清理应用内临时副本并取消任务；服务端临时任务最长保留 10 分钟，网络异常时清理可能延迟。</text>
-    <button class="secondary" bindtap="openMattingComparison">打开效果对比</button>
-  </view>
-  <view class="panel">
-    <text class="section">关于南一证件照</text>
-    <text class="muted">由南一科技提供。照片编辑与常见尺寸导出功能在设备本机完成。</text>
+    <text class="section">本地照片编辑</text>
+    <text class="muted">照片编辑与常见尺寸导出功能在设备本机完成。请按照片实际用途及办理方要求核对成品。</text>
   </view>
 </view>
