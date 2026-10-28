@@ -3,7 +3,7 @@
 原生微信小程序 + 独立开发用 FastAPI 实验室。本工作分支 `review/no-private-model-comparison`
 从 `feat/local-chroma-key-mvp` 的 `6bae825` 创建，用于隔离验证提审包；
 此前的 `feat/local-chroma-key-mvp` 已发布为 GitHub 预发布 `v0.2.0-rc.3`；
-当前隔离候选版本为 `v0.2.0-rc.4`；
+当前隔离候选版本为 `v0.2.0-rc.5`；
 以普通用户可用的「南一证件照」本地编辑工具为首发目标：裁剪、纯色背景换底、常见尺寸、
 JPEG / PNG 和文件大小导出都在设备上完成。用户此前确认上游分支的本地编辑链路真机测试通过；
 本分支新增的提审隔离改动尚未真机复测。设备 / 微信版本及逐项覆盖未留档，不代表完整 Android / iOS 矩阵、
